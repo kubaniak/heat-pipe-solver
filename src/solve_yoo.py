@@ -90,116 +90,57 @@ def explicit_finite_difference_solver(params):
     for step in tqdm(range(n_steps), desc="Solving heat equation"):
         T_new = T.copy()
         
-        # Update interior nodes (i=1 to N-1)
-        for i in range(1, N-1):
-            # Determine region for node i based on its x-position
-            region = get_region(x[i], L_e, L_a, L_t)
-            
-            # Compute effective thermal conductivity at node i using our conduction model
-            # (Assume that the vapor region uses the conduction-based k_eff)
-            k_eff_i = compute_k_eff(T[i], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                             h_lv, h_l, h_v, region)
-            
-            # For interface values, a simple arithmetic average is used.
-            # For node i+1:
-            region_right = get_region(x[i+1], L_e, L_a, L_t)
-            k_eff_ip = compute_k_eff(T[i+1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                              h_lv, h_l, h_v, region_right)
-            k_eff_right = 0.5*(k_eff_i + k_eff_ip)
-            
-            # For node i-1:
-            region_left = get_region(x[i-1], L_e, L_a, L_t)
-            k_eff_im = compute_k_eff(T[i-1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                              h_lv, h_l, h_v, region_left)
-            k_eff_left = 0.5*(k_eff_i + k_eff_im)
-            
-            # Compute temperature gradients at interfaces:
-            dT_dx_right = (T[i+1] - T[i]) / dx
-            dT_dx_left  = (T[i] - T[i-1]) / dx
-            
-            # In the vapor region, enforce the sonic limit on k_eff.
-            # Here, we assume that nodes in the vapor core are those using the conduction-based effective conductivity.
-            # If the region is vapor (i.e. 'evap_con' or 'adiabatic' as defined), apply sonic limit.
-            k_eff_right = enforce_sonic_limit(k_eff_right, dT_dx_right, Q_sonic, A_c)
-            k_eff_left  = enforce_sonic_limit(k_eff_left, dT_dx_left, Q_sonic, A_c)
-            
-            # Explicit finite difference update:
-            T_new[i] = T[i] + (dt / (rho * c_p * (dx**2))) * \
-                       ( k_eff_right * (T[i+1] - T[i]) - k_eff_left * (T[i] - T[i-1]) )
+        # Compute regions and effective conductivity for all nodes
+        regions = np.array([get_region(xi, L_e, L_a, L_t) for xi in x])
+        k_eff_all = np.array([compute_k_eff(T[i], P, R_v, mu_v, m_g, k_B, R_g, N_A,
+                                            h_lv, h_l, h_v, regions[i])
+                            for i in range(N)])
         
-        # Boundary condition at x = 0 (evaporator end) using ghost node approach:
-        # 1. Create a ghost node T_ghost at x = -dx
-        # 2. Apply central difference: (T[1] - T_ghost)/(2*dx) = -q_e/k_w
-        # 3. Solve for T_ghost: T_ghost = T[1] + 2*dx*q_e/k_w
-        T_ghost = T[1] + 2*dx*q_e/k_w
-        
-        # Determine region for node 0
-        region = get_region(x[0], L_e, L_a, L_t)
-        
-        # Compute k_eff for the boundary node
-        k_eff_0 = compute_k_eff(T[0], P, R_v, mu_v, m_g, k_B, R_g, N_A, 
-                                h_lv, h_l, h_v, region)
-        
-        # Compute k_eff for the next node
-        region_right = get_region(x[1], L_e, L_a, L_t)
-        k_eff_1 = compute_k_eff(T[1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                h_lv, h_l, h_v, region_right)
-        
-        # Interface conductivity
-        k_eff_right = 0.5*(k_eff_0 + k_eff_1)
-        
-        # Temperature gradient at the right interface
-        dT_dx_right = (T[1] - T[0]) / dx
-        
-        # Apply sonic limit
-        k_eff_right = enforce_sonic_limit(k_eff_right, dT_dx_right, Q_sonic, A_c)
-        
-        # Update the boundary node using the standard explicit scheme with the ghost node
-        T_new[0] = T[0] + (dt / (rho * c_p * (dx**2))) * \
-                   (k_eff_right * (T[1] - T[0]) - k_eff_0 * (T[0] - T_ghost))
-        
-        # Boundary condition at x = L_t (condenser end):
-        # Radiative flux: -k_w*(dT/dx)|_{L_t} = σ ε (T^4 - T_inf^4)
-        # Linearize: T^4 - T_inf^4 ≈ 4*T_inf^3*(T - T_inf)
-        
-        # 1. Define the linearized heat transfer coefficient
-        h_r = 4 * sigma * eps * (T_inf**3)
-        
-        # 2. Define ghost node location at x = L_t + dx and determine T[N]
-        # For radiative BC: -k_w * (T[N] - T[N-2])/(2*dx) = h_r * (T[N-1] - T_inf)
-        # Solve for T[N]: T[N] = T[N-2] - (2*dx*h_r/k_w)*(T[N-1] - T_inf)
-        T_ghost_end = T[-2] - (2*dx*h_r/k_w)*(T[-1] - T_inf)
-        
-        # Determine region for the last node
-        region_end = get_region(x[-1], L_e, L_a, L_t)
-        
-        # Compute k_eff for the boundary node
-        k_eff_end = compute_k_eff(T[-1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                 h_lv, h_l, h_v, region_end)
-        
-        # Compute k_eff for the previous node
-        region_left_end = get_region(x[-2], L_e, L_a, L_t)
-        k_eff_prev = compute_k_eff(T[-2], P, R_v, mu_v, m_g, k_B, R_g, N_A,
-                                  h_lv, h_l, h_v, region_left_end)
-        
-        # Interface conductivity
-        k_eff_left_end = 0.5*(k_eff_end + k_eff_prev)
-        
-        # Temperature gradient at the left interface
-        dT_dx_left_end = (T[-1] - T[-2]) / dx
-        
-        # Apply sonic limit
-        k_eff_left_end = enforce_sonic_limit(k_eff_left_end, dT_dx_left_end, Q_sonic, A_c)
-        
-        # Update the boundary node using the standard explicit scheme with the ghost node
-        T_new[-1] = T[-1] + (dt / (rho * c_p * (dx**2))) * \
-                    (k_eff_end * (T_ghost_end - T[-1]) - k_eff_left_end * (T[-1] - T[-2]))
-        
-        # Store the new temperature profile
-        T_history[step + 1, :] = T_new
+        # Compute interface conductivities as the arithmetic average
+        k_eff_interface = 0.5 * (k_eff_all[1:] + k_eff_all[:-1])
+        dT_dx_interface = (T[1:] - T[:-1]) / dx
 
-        # Update temperature field and time
+        # Apply the sonic limit in a vectorized way
+        vec_enforce_sonic = np.vectorize(enforce_sonic_limit)
+        k_eff_interface = vec_enforce_sonic(k_eff_interface, dT_dx_interface, Q_sonic, A_c)
+
+        # Update interior nodes:
+        # For node i, left interface is k_eff_interface[i-1] and right interface is k_eff_interface[i]
+        T_new[1:-1] = T[1:-1] + (dt / (rho * c_p * dx**2)) * (
+                            k_eff_interface[1:] * (T[2:] - T[1:-1]) -
+                            k_eff_interface[:-1] * (T[1:-1] - T[:-2]))
+        
+        # --- Left boundary (x = 0) ---
+        T_ghost = ghost_node_evaporator(T[1], dx, q_e, k_w)
+        region0 = get_region(x[0], L_e, L_a, L_t)
+        region1 = get_region(x[1], L_e, L_a, L_t)
+        k_eff_0 = compute_k_eff(T[0], P, R_v, mu_v, m_g, k_B, R_g, N_A,
+                                h_lv, h_l, h_v, region0)
+        k_eff_1 = compute_k_eff(T[1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
+                                h_lv, h_l, h_v, region1)
+        k_eff_right_bound = 0.5 * (k_eff_0 + k_eff_1)
+        dT_dx_bound = (T[1] - T[0]) / dx
+        k_eff_right_bound = enforce_sonic_limit(k_eff_right_bound, dT_dx_bound, Q_sonic, A_c)
+        T_new[0] = T[0] + (dt / (rho * c_p * dx**2)) * (k_eff_right_bound * (T[1] - T[0]) -
+                                                        k_eff_0 * (T[0] - T_ghost))
+
+        # --- Right boundary (x = L_t) ---
+        # Here, h_r is the linearized radiative coefficient:
+        h_r = 4 * sigma * eps * (T_inf**3)
+        T_ghost_end = ghost_node_condenser(T[-2], T[-1], dx, h_r, k_w, T_inf)
+        region_end = get_region(x[-1], L_e, L_a, L_t)
+        region_left_end = get_region(x[-2], L_e, L_a, L_t)
+        k_eff_end = compute_k_eff(T[-1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
+                                h_lv, h_l, h_v, region_end)
+        k_eff_prev = compute_k_eff(T[-2], P, R_v, mu_v, m_g, k_B, R_g, N_A,
+                                h_lv, h_l, h_v, region_left_end)
+        k_eff_left_bound = 0.5 * (k_eff_end + k_eff_prev)
+        dT_dx_left_bound = (T[-1] - T[-2]) / dx
+        k_eff_left_bound = enforce_sonic_limit(k_eff_left_bound, dT_dx_left_bound, Q_sonic, A_c)
+        T_new[-1] = T[-1] + (dt / (rho * c_p * dx**2)) * (k_eff_end * (T_ghost_end - T[-1]) -
+                                                        k_eff_left_bound * (T[-1] - T[-2]))
+
+        T_history[step + 1, :] = T_new
         T = T_new.copy()
-        t += dt
     
     return x, T_history
