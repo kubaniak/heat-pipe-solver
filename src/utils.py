@@ -23,6 +23,11 @@ def ghost_node_evaporator(T1, dx, q_e, k_w):
     """Compute ghost node for evaporator boundary."""
     return T1 + 2 * dx * q_e / k_w
 
-def ghost_node_condenser(T_prev, T_last, dx, h_r, k_w, T_inf):
-    """Compute ghost node for condenser boundary."""
-    return T_prev - (2 * dx * h_r / k_w) * (T_last - T_inf)
+def ghost_node_condenser_nonlinear(T_prev, T_last, dx, sigma, eps, k_w, T_inf):
+    """
+    Compute the ghost node value at the condenser (x = L_t + dx)
+    using the full nonlinear radiative boundary condition:
+      -k_w*(T_ghost - T_prev)/(2*dx) = sigma*eps*(T_last**4 - T_inf**4)
+    Solved for T_ghost.
+    """
+    return T_prev - (2 * dx * sigma * eps / k_w) * (T_last**4 - T_inf**4)

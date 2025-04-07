@@ -124,10 +124,8 @@ def explicit_finite_difference_solver(params):
         T_new[0] = T[0] + (dt / (rho * c_p * dx**2)) * (k_eff_right_bound * (T[1] - T[0]) -
                                                         k_eff_0 * (T[0] - T_ghost))
 
-        # --- Right boundary (x = L_t) ---
-        # Here, h_r is the linearized radiative coefficient:
-        h_r = 4 * sigma * eps * (T_inf**3)
-        T_ghost_end = ghost_node_condenser(T[-2], T[-1], dx, h_r, k_w, T_inf)
+        # --- Updated Right Boundary (x = L_t) using the Nonlinear Radiative Condition ---
+        T_ghost_end = ghost_node_condenser_nonlinear(T[-2], T[-1], dx, sigma, eps, k_w, T_inf)
         region_end = get_region(x[-1], L_e, L_a, L_t)
         region_left_end = get_region(x[-2], L_e, L_a, L_t)
         k_eff_end = compute_k_eff(T[-1], P, R_v, mu_v, m_g, k_B, R_g, N_A,
@@ -139,7 +137,7 @@ def explicit_finite_difference_solver(params):
         k_eff_left_bound = enforce_sonic_limit(k_eff_left_bound, dT_dx_left_bound, Q_sonic, A_c)
         T_new[-1] = T[-1] + (dt / (rho * c_p * dx**2)) * (k_eff_end * (T_ghost_end - T[-1]) -
                                                         k_eff_left_bound * (T[-1] - T[-2]))
-
+        
         T_history[step + 1, :] = T_new
         T = T_new.copy()
     

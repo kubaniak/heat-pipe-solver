@@ -11,10 +11,10 @@ if __name__ == "__main__":
         "L_a": 0.4,       # Adiabatic length [m]
         "L_c": 0.3,       # Condenser length [m]
         "dx": 0.01,       # Spatial step [m]
-        "dt": 1e-5,       # Time step [s]
-        "t_end": 10.0,     # Total simulation time [s]
-        "rho": 8000,      # Example density [kg/m^3]
-        "c_p": 500,       # Example specific heat [J/(kg-K)]
+        "dt": 1e-4,       # Time step [s]
+        "t_end": 5.0,     # Total simulation time [s]
+        "rho": 800,       # Sodium Density [kg/m^3] #TODO: use get_density()
+        "c_p": 500,       # Example specific heat [J/(kg-K)] #TODO: use get_specific_heat()
         "k_w": 15,        # Wall thermal conductivity [W/(m-K)]
         "q_e": 1e4,       # Heat flux at evaporator [W/m^2]
         "sigma": 5.67e-8, # Stefan-Boltzmann constant [W/(m^2-K^4)]
@@ -22,7 +22,7 @@ if __name__ == "__main__":
         "T_inf": 300,     # Ambient temperature [K]
         
         # Vapor effective conductivity parameters:
-        "P": 1e5,         # Saturated vapor pressure [Pa]
+        "P": 1e5,         # Saturated vapor pressure [Pa] #TODO: use get_vapor_pressure()
         "R_v": 0.01,      # Vapor core radius [m]
         "mu_v": 1e-5,     # Dynamic viscosity [Pa-s]
         "m_g": 4.65e-26,  # Molecular mass [kg]
@@ -36,13 +36,13 @@ if __name__ == "__main__":
         
         # Sonic limit parameters:
         "A_c": np.pi * (0.01**2), # Cross-sectional area [m^2]
-        "rho_v0": 1.0,    # Example vapor density at sonic condition [kg/m^3]
+        "rho_v0": 241.1,   # Example vapor density at sonic condition [kg/m^3]
         "h_cl": 2.0e6,    # Characteristic latent heat [J/kg]
         "gamma": 1.4,     # Specific heat ratio (adiabatic index)
         "T_v0": 700.0,    # Reference vapor temperature for sonic limit [K]
         
         # Initial condition for temperature (set uniformly)
-        "T_init": 100.0   # Initial temperature [K]
+        "T_init": 300.0   # Initial temperature [K]
     }
 
     # Solve

@@ -122,8 +122,6 @@ def compute_k_eff(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv,
     # For clarity, we assume M_g is embedded in the energy term or provided separately.
     # Here, we assume M_g is included as a parameter (and thus the caller must supply it).
     M_g = 0.0229897693  # <-- Insert the molar mass of vapor [kg/mol] here or pass it as a parameter.
-    # For this implementation, we'll assume M_g is provided externally.
-    # To enable testing, you might temporarily set M_g = 0.0 or assign a dummy value.
     if M_g is None:
         # If no value is provided, leave it as a placeholder.
         raise ValueError("Molar mass M_g must be provided. Please update the code with its value.")
@@ -148,23 +146,10 @@ if __name__ == "__main__":
     h_v = 1.8e6              # Vapor enthalpy for adiabatic section [J/kg] (example value)
     M_g = 3.8e-26            # Molar mass of vapor [kg/mol] (example value for sodium, adjust accordingly)
     
-    # We override M_g inside the compute_k_eff function by patching it here:
-    def compute_k_eff_with_M_g(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv, h_l, h_v, section='evap_con', M_g_val=None):
-        if M_g_val is None:
-            raise ValueError("Please provide a value for M_g (molar mass)!")
-        D = compute_D(P, R_v, mu_v, T, m_g, k_B, section)
-        if section == 'evap_con':
-            energy_term = h_l
-        elif section == 'adiabatic':
-            energy_term = h_v
-        # Return absolute value for physical consistency
-        k_eff = abs((D * energy_term * h_lv * M_g_val * P) / (R_g * N_A * k_B * (T**3)))
-        return k_eff
-
     # Compute effective thermal conductivity for evaporator/condenser section
-    k_eff_evap = compute_k_eff_with_M_g(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv, h_l, h_v, section='evap_con', M_g_val=M_g)
+    k_eff_evap = compute_k_eff(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv, h_l, h_v, section='evap_con', M_g_val=M_g)
     print("Effective thermal conductivity (evaporator/condenser):", k_eff_evap, "W/m-K")
     
     # Compute effective thermal conductivity for adiabatic section
-    k_eff_adiab = compute_k_eff_with_M_g(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv, h_l, h_v, section='adiabatic', M_g_val=M_g)
+    k_eff_adiab = compute_k_eff(T, P, R_v, mu_v, m_g, k_B, R_g, N_A, h_lv, h_l, h_v, section='adiabatic', M_g_val=M_g)
     print("Effective thermal conductivity (adiabatic):", k_eff_adiab, "W/m-K")
