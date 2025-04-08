@@ -14,6 +14,9 @@ from params import get_all_params
 # from postprocess import save_results, plot_results
 
 from utils import preview_mesh, preview_face_mask
+import os
+import cv2
+import matplotlib.pyplot as plt 
 
 # ----------------------------------------
 # Load parameters from configuration file
@@ -59,7 +62,7 @@ X, Y = mesh.faceCenters
 faces_evaporator = (mesh.facesTop & (X < params['L_e']))
 faces_condenser = (mesh.facesTop & ((X > params['L_e'] + params['L_a']) & (X < L_total)))
 
-preview_face_mask(mesh, faces_evaporator, title="Evaporator Face Mask")
+# preview_face_mask(mesh, faces_evaporator, title="Evaporator Face Mask")
 # preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask")
 
 n = mesh.faceNormals
@@ -74,7 +77,7 @@ T.faceGrad.constrain(-q_rad / params['k_wall'] * n, where=faces_condenser)  # dT
 # ----------------------------------------
 
 if __name__ == '__main__':
-    viewer = Viewer(vars=T, datamin=0., datamax=1.)
+    viewer = Viewer(vars=T)
     viewer.plot()
 
 # ----------------------------------------
@@ -84,12 +87,60 @@ if __name__ == '__main__':
 time_step = params['dt']
 steps = int(params['t_end'] / time_step)
 
-
+x_point = 0.65  # Specify the point x along the heat pipe (in meters)
+x_index = int(x_point / L_total * params['nx_vc'])  # Convert x to mesh index
+temperature_evolution = []  # List to store temperature values over time
+time_values = []  # List to store time values
 
 for step in range(steps):
     eq.solve(var=T,
              dt=time_step)
     
-    print(f"Step {step+1}/{steps}: T at 0.65 m = {T.value[int(0.65 / L_total * params['nx_vc'])]} K")
+    temperature_evolution.append(T.value[x_index])  # Record temperature at x_point
+    time_values.append(step * time_step)  # Record the current time
+    
+    print(f"Step {step+1}/{steps}: T at {x_point} m = {T.value[x_index]} K")
     if __name__ == '__main__':
+        # viewer.plot(f"frames/frame_{step:04d}.png")
         viewer.plot()
+
+# # After the time-stepping loop, compile the frames into a video
+# frame_folder = "frames"
+# video_path = "output/temperature_evolution.mp4"
+# os.makedirs("output", exist_ok=True)
+
+# # Get the list of frame files and sort them
+# frame_files = sorted([f for f in os.listdir(frame_folder) if f.endswith(".png")])
+
+# # Read the first frame to determine the video size
+# first_frame = cv2.imread(os.path.join(frame_folder, frame_files[0]))
+# height, width, _ = first_frame.shape
+
+# # Initialize the video writer
+# fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+# video_writer = cv2.VideoWriter(video_path, fourcc, 10, (width, height))
+
+# # Write each frame to the video
+# for frame_file in frame_files:
+#     frame = cv2.imread(os.path.join(frame_folder, frame_file))
+#     video_writer.write(frame)
+
+# video_writer.release()
+# print(f"Video saved to {video_path}")
+
+# ----------------------------------------
+# Plot temperature evolution
+# ----------------------------------------
+
+plt.figure()
+plt.plot(time_values, temperature_evolution, label=f'Temperature at x = {x_point} m')
+plt.xlabel('Time (s)')
+plt.ylabel('Temperature (K)')
+plt.title('Temperature Evolution Over Time')
+plt.legend()
+plt.grid()
+plt.show()
+# Save the plot to a file
+output_path = "plots/temperature_evolution"
+plt.savefig(output_path, dpi=300, bbox_inches='tight')
+print(f"Plot saved to {output_path}")
