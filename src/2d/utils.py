@@ -41,7 +41,7 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
         title (str): Title of the plot.
     """
     import matplotlib.pyplot as plt
-    
+
     # First, plot the mesh using cell centers for context
     x_cells, y_cells = mesh.cellCenters
     plt.figure(figsize=(10, 5))
@@ -70,3 +70,34 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     plt.colorbar(label='Mask Value')
     plt.legend()
     plt.show()
+
+def save_animation(frames_path, output_path, fps=10):
+    """
+    Compiles frames into a video using OpenCV.
+
+    Parameters:
+        frames_path (str): Path to the folder containing frame images.
+        output_path (str): Path where the output video will be saved.
+        fps (int): Frames per second for the video.
+    """
+    import os
+    import cv2
+
+    # Get the list of frame files and sort them
+    frame_files = sorted([f for f in os.listdir(frames_path) if f.endswith(".png")])
+
+    # Read the first frame to determine the video size
+    first_frame = cv2.imread(os.path.join(frames_path, frame_files[0]))
+    height, width, _ = first_frame.shape
+
+    # Initialize the video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    # Write each frame to the video
+    for frame_file in frame_files:
+        frame = cv2.imread(os.path.join(frames_path, frame_file))
+        video_writer.write(frame)
+
+    video_writer.release()
+    print(f"Video saved to {output_path}")

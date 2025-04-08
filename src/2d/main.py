@@ -13,7 +13,7 @@ from params import get_all_params
 # from sodium_properties import get_sodium_properties
 # from postprocess import save_results, plot_results
 
-from utils import preview_mesh, preview_face_mask
+from utils import preview_mesh, preview_face_mask, save_animation
 import os
 import cv2
 import matplotlib.pyplot as plt 
@@ -83,12 +83,12 @@ if __name__ == '__main__':
 # ----------------------------------------
 # Time-stepping loop
 # ----------------------------------------
+x_point = 0.65  # Specify the point x along the heat pipe (in meters)
 
+x_index = int(x_point / L_total * params['nx_vc'])  # Convert x to mesh index
 time_step = params['dt']
 steps = int(params['t_end'] / time_step)
 
-x_point = 0.65  # Specify the point x along the heat pipe (in meters)
-x_index = int(x_point / L_total * params['nx_vc'])  # Convert x to mesh index
 temperature_evolution = []  # List to store temperature values over time
 time_values = []  # List to store time values
 
@@ -104,29 +104,7 @@ for step in range(steps):
         # viewer.plot(f"frames/frame_{step:04d}.png")
         viewer.plot()
 
-# # After the time-stepping loop, compile the frames into a video
-# frame_folder = "frames"
-# video_path = "output/temperature_evolution.mp4"
-# os.makedirs("output", exist_ok=True)
-
-# # Get the list of frame files and sort them
-# frame_files = sorted([f for f in os.listdir(frame_folder) if f.endswith(".png")])
-
-# # Read the first frame to determine the video size
-# first_frame = cv2.imread(os.path.join(frame_folder, frame_files[0]))
-# height, width, _ = first_frame.shape
-
-# # Initialize the video writer
-# fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-# video_writer = cv2.VideoWriter(video_path, fourcc, 10, (width, height))
-
-# # Write each frame to the video
-# for frame_file in frame_files:
-#     frame = cv2.imread(os.path.join(frame_folder, frame_file))
-#     video_writer.write(frame)
-
-# video_writer.release()
-# print(f"Video saved to {video_path}")
+# save_animation("frames", "output.mp4", fps=10)
 
 # ----------------------------------------
 # Plot temperature evolution

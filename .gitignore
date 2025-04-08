@@ -172,3 +172,8 @@ cython_debug/
 
 # vscode
 .vscode/
+
+# frames folder
+frames/
+#   This folder is used by the frames package to store temporary files. It is not needed for
+#   the package to work and can be safely ignored.
