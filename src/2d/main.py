@@ -14,9 +14,6 @@ from params import get_all_params
 # from postprocess import save_results, plot_results
 
 from utils import preview_mesh, preview_face_mask, save_animation
-import os
-import cv2
-import matplotlib.pyplot as plt 
 
 # ----------------------------------------
 # Load parameters from configuration file
@@ -109,6 +106,8 @@ for step in range(steps):
 # ----------------------------------------
 # Plot temperature evolution
 # ----------------------------------------
+
+import matplotlib.pyplot as plt
 
 plt.figure()
 plt.plot(time_values, temperature_evolution, label=f'Temperature at x = {x_point} m')
