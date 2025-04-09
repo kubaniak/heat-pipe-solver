@@ -33,79 +33,153 @@ def generate_mesh_2d(L_x, L_y, nx, ny):
     return mesh
 
 import numpy as np
-from fipy import Grid2D
+from fipy import Grid2D, CellVariable
 
 def generate_composite_mesh(mesh_params, dimensions):
-    r"""
-    Generates a composite 2D mesh for a heat pipe using FiPy.
-    
-    The mesh is constructed in the (x,r) (or equivalently (x,y)) plane.
-    In this configuration, the x‑axis is the axial (length) direction, while
-    the y‑axis represents the radial direction (from the vapor core at y = 0 up
-    to the outer wall at y = R_wall). The three layers (vapor core, wick, and wall)
-    are prescribed by different numbers of cells in the y‑direction.
-    
-    Parameters
-    ----------
-    mesh_params : dict
-        Dictionary with the following keys:
-            "nx_wall": number of cells in x for the wall layer (must equal others),
-            "nr_wall": number of cells in r (y) for the wall layer,
-            "nx_wick": number of cells in x for the wick layer,
-            "nr_wick": number of cells in r (y) for the wick layer,
-            "nx_vc": number of cells in x for the vapor core,
-            "nr_vc": number of cells in r (y) for the vapor core.
-    
-    dimensions : dict
-        Dictionary with the following keys:
-            "R_wall": outer radius of the wall,
-            "R_wick": outer radius of the wick (inner boundary of wall),
-            "R_vc": radius of the vapor core (inner boundary of wick),
-            "L_e": axial length of the evaporator,
-            "L_a": axial length of the adiabatic (wick) region,
-            "L_c": axial length of the condenser.
-    
-    Returns
-    -------
-    mesh : fipy.meshes.Grid2D
-        A FiPy mesh whose x‑direction spans the entire heat pipe length and whose
-        y‑direction is partitioned into the three layers with nonuniform spacing.
     """
-    # ------------------------------
-    # 1. Axial (x) direction parameters
-    # ------------------------------
-    L_e = dimensions["L_e"]
-    L_a = dimensions["L_a"]
-    L_c = dimensions["L_c"]
-    L_total = L_e + L_a + L_c
+    Generate a composite mesh for a heat pipe with different cell densities in different regions.
     
-    # Check that the axial cell counts are the same for all layers:
+    The mesh has three radial sections:
+    - Wall (outer layer): finer mesh
+    - Wick (middle layer): medium mesh density
+    - Vapor core (inner core): coarse mesh
+    
+    Parameters:
+        mesh_params (dict): Dictionary containing mesh parameters:
+            - nx_wall, nr_wall: Number of cells in x and r direction for the wall
+            - nx_wick, nr_wick: Number of cells in x and r direction for the wick
+            - nx_vc, nr_vc: Number of cells in x and r direction for the vapor core
+        
+        dimensions (dict): Dictionary containing geometric dimensions in meters:
+            - R_wall: Outer radius of the wall
+            - R_wick: Outer radius of the wick (inner radius of wall)
+            - R_vc: Radius of the vapor core (inner radius of wick)
+            - L_e, L_a, L_c: Lengths of evaporator, adiabatic section, and condenser
+    
+    Returns:
+        mesh (Grid2D): A FiPy Grid2D mesh representing the heat pipe
+        cell_types (CellVariable): Cell variable indicating the region type (0: vapor core, 1: wick, 2: wall)
+    """
+    # Calculate total length
+    L_total = dimensions["L_e"] + dimensions["L_a"] + dimensions["L_c"]
+    
+    # Extract mesh parameters
     nx_wall = mesh_params["nx_wall"]
-    nx_wick = mesh_params["nx_wick"]
-    nx_vc   = mesh_params["nx_vc"]
-    
-    if not (nx_wall == nx_wick == nx_vc):
-        raise ValueError("The number of x-cells for each layer must be identical for a conformal mesh.")
-    
-    nx = nx_wall
-    dx = L_total / nx
-
-    # ------------------------------
-    # 2. Radial (y) direction parameters
-    # ------------------------------
-    nr_vc   = mesh_params["nr_vc"]
-    nr_wick = mesh_params["nr_wick"]
     nr_wall = mesh_params["nr_wall"]
-
-    mesh_wall = Grid2D(dx=dx, dy=(dimensions["R_wall"] - dimensions["R_wick"]) / nr_wall, nx=nx, ny=nr_wall)
-    mesh_wick = Grid2D(dx=dx, dy=(dimensions["R_wick"] - dimensions["R_vc"]) / nr_wick, nx=nx, ny=nr_wick)
-    mesh_vc = Grid2D(dx=dx, dy=dimensions["R_vc"] / nr_vc, nx=nx, ny=nr_vc)
+    nx_wick = mesh_params["nx_wick"]
+    nr_wick = mesh_params["nr_wick"]
+    nx_vc = mesh_params["nx_vc"]
+    nr_vc = mesh_params["nr_vc"]
     
-
-    mesh_vc_wick = mesh_vc + (mesh_wick + ((0,), (dimensions["R_vc"],)))
-    mesh = mesh_vc_wick + (mesh_wall + ((0,), (dimensions["R_wick"],)))
-
-    return mesh
+    # Verify that x-direction cell counts match (as required by the mesh)
+    if nx_wall != nx_wick or nx_wick != nx_vc:
+        print("Warning: Adjusting x-direction cell counts to match nx_wall")
+        nx_wick = nx_wall
+        nx_vc = nx_wall
+    
+    # Calculate the total number of cells in x and y directions
+    nx = nx_wall  # All sections have same x-resolution
+    ny = nr_wall + nr_wick + nr_vc
+    
+    # Cell size in x-direction (uniform)
+    dx = L_total / nx
+    
+    # Calculate the width of each region in y-direction
+    wall_thickness = dimensions["R_wall"] - dimensions["R_wick"]
+    wick_thickness = dimensions["R_wick"] - dimensions["R_vc"]
+    core_radius = dimensions["R_vc"]
+    
+    # Create a uniform mesh first
+    mesh = Grid2D(nx=nx, ny=ny, dx=dx, dy=1.0)  # We'll adjust y coordinates later
+    
+    # Get cell centers and adjust the y-coordinates
+    x, y = mesh.cellCenters
+    
+    # Calculate cell heights for each region
+    dy_vc = core_radius / nr_vc
+    dy_wick = wick_thickness / nr_wick
+    dy_wall = wall_thickness / nr_wall
+    
+    # Create a cell type indicator (0: vapor core, 1: wick, 2: wall)
+    cell_types = CellVariable(name="Cell Types", mesh=mesh, value=-1)
+    
+    # Adjust y-coordinates based on cell position
+    new_y = np.zeros_like(y)
+    
+    for i in range(nx):
+        for j in range(ny):
+            cell_index = i * ny + j
+            
+            if j < nr_vc:
+                # Vapor core region
+                new_y[cell_index] = j * dy_vc + dy_vc/2
+                cell_types.value[cell_index] = 0
+            elif j < nr_vc + nr_wick:
+                # Wick region
+                j_local = j - nr_vc
+                new_y[cell_index] = core_radius + j_local * dy_wick + dy_wick/2
+                cell_types.value[cell_index] = 1
+            else:
+                # Wall region
+                j_local = j - (nr_vc + nr_wick)
+                new_y[cell_index] = core_radius + wick_thickness + j_local * dy_wall + dy_wall/2
+                cell_types.value[cell_index] = 2
+    
+    # Create a new mesh with the adjusted coordinates
+    from fipy.meshes.nonUniformGrid2D import NonUniformGrid2D
+    
+    # Need to calculate vertices from cell centers
+    nx, ny = mesh.shape
+    
+    # Create vertices arrays (one more in each dimension than cells)
+    vertices_x = np.zeros(nx + 1)
+    vertices_y = np.zeros(ny + 1)
+    
+    # Set x vertices based on uniform spacing
+    dx = L_total / nx
+    for i in range(nx + 1):
+        vertices_x[i] = i * dx
+    
+    # Set y vertices based on the three different regions
+    vertices_y[0] = 0.0  # Bottom boundary
+    
+    # Vapor core vertices
+    for j in range(1, nr_vc + 1):
+        vertices_y[j] = j * dy_vc
+        
+    # Wick vertices
+    for j in range(nr_vc + 1, nr_vc + nr_wick + 1):
+        j_local = j - nr_vc
+        vertices_y[j] = core_radius + j_local * dy_wick
+        
+    # Wall vertices
+    for j in range(nr_vc + nr_wick + 1, ny + 1):
+        j_local = j - (nr_vc + nr_wick)
+        vertices_y[j] = core_radius + wick_thickness + j_local * dy_wall
+    
+    # Create the non-uniform grid using vertex coordinates
+    new_mesh = NonUniformGrid2D(
+        dx=vertices_x[1:] - vertices_x[:-1], 
+        dy=vertices_y[1:] - vertices_y[:-1],
+        nx=nx, ny=ny
+    )
+    
+    # Recreate the cell types on the new mesh
+    new_cell_types = CellVariable(name="Cell Types", mesh=new_mesh, value=-1)
+    
+    # Fill in the cell types on the new mesh
+    for i in range(nx):
+        for j in range(ny):
+            cell_index = i * ny + j
+            
+            if j < nr_vc:
+                new_cell_types.value[cell_index] = 0  # Vapor core
+            elif j < nr_vc + nr_wick:
+                new_cell_types.value[cell_index] = 1  # Wick
+            else:
+                new_cell_types.value[cell_index] = 2  # Wall
+    
+    return new_mesh, new_cell_types
 
 
 # For testing this module independently (optional)
@@ -130,7 +204,7 @@ if __name__ == '__main__':
         "L_c":    0.292,
     }
 
-    mesh = generate_composite_mesh(mesh_params, dimensions)
+    mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
     print("Composite mesh generated:")
     print(" - Number of x cells:", mesh.numberOfCells // (mesh_params["nr_vc"] + mesh_params["nr_wick"] + mesh_params["nr_wall"]))
     print(" - Total number of cells:", mesh.numberOfCells)
