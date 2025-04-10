@@ -69,11 +69,52 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     plt.legend()
     plt.show()
 
+
+def preview_cell_types(mesh, cell_types, title="Heat Pipe Regions"):
+    """
+    Visualizes the different regions of a heat pipe based on cell types.
+
+    Parameters:
+        mesh: The FiPy mesh object.
+        cell_types: CellVariable containing region markers (0 for vapor core, 1 for wick, 2 for wall).
+        title (str): Title of the plot.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # Extract cell centers
+    x, y = mesh.cellCenters
+    
+    # Get cell type values
+    values = cell_types.value
+    
+    # Create figure
+    plt.figure(figsize=(10, 5))
+    
+    # Create a scatter plot with different colors for each region
+    # Using a custom colormap appropriate for distinct regions
+    regions = ['Vapor Core', 'Wick', 'Wall']
+    colors = ['lightblue', 'orange', 'gray']
+    
+    # Plot each region separately for better control and legend
+    for i, (region, color) in enumerate(zip(regions, colors)):
+        mask = (values == i)
+        plt.scatter(x[mask], y[mask], marker='o', color=color, s=10, label=region)
+    
+    plt.title(title)
+    plt.xlabel('x [m]')
+    plt.ylabel('y [m]')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.legend()
+    plt.show()
+
+
 def init_tripcolor_viewer(mesh):
     import matplotlib.pyplot as plt
     import matplotlib.tri as tri
     import numpy as np
-    
+
     x = mesh.cellCenters[0]
     y = mesh.cellCenters[1]
     triang = tri.Triangulation(x, y)

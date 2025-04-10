@@ -30,7 +30,7 @@ def load_params(config_file=None):
     if config_file is None:
         config_file = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            'config', 'heat_pipe_config.json'
+            'config', 'faghri.json'
         )
     
     # Read the configuration file
@@ -83,7 +83,7 @@ def get_param_group(group_name):
         
     config_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'config', 'heat_pipe_config.json'
+        'config', 'faghri.json'
     )
     
     try:

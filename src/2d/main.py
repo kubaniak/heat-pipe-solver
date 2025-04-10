@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 from mesh import generate_mesh_2d, generate_composite_mesh
 from params import get_all_params, get_param_group
 from utils import preview_mesh, preview_face_mask, save_animation, init_tripcolor_viewer
-# from k_eff import getKEff 
-# from sodium_properties import get_sodium_properties
-# from postprocess import save_results, plot_results
+from sodium_properties import get_sodium_properties
 
+from fipy import __version__ as fipy_version
+logger.info(f"Using FiPy version: {fipy_version}")
 
 # ----------------------------------------
 # Load parameters from configuration file
@@ -37,13 +37,44 @@ dimensions = get_param_group('dimensions')
 L_total = params['L_e'] + params['L_a'] + params['L_c']
 R_total = params['R_wall'] + params['R_wick'] + params['R_vc']
 
+logger.info("Parameters Loaded")
+
+# ----------------------------------------
+# Load sodium properties
+# ----------------------------------------
+
+sodium_properties = get_sodium_properties()
+
+logger.info("Sodium Properties Loaded")
+
+# ----------------------------------------
+# Define material properties
+# ----------------------------------------
+
+T_working = 800  # Example working temperature in Kelvin
+
+rho_vc = sodium_properties['density'](T_working)
+c_p_vc = sodium_properties['specific_heat'](T_working)
+k_vc = sodium_properties['thermal_conductivity'](T_working)
+
+rho_wick = params['porosity'] * rho_vc + (1 - params['porosity']) * params['rho_wall']
+c_p_wick = params['porosity'] * c_p_vc + (1 - params['porosity']) * params['c_p_wall']
+k_wick = params['porosity'] * k_vc + (1 - params['porosity']) * params['k_wall']
+
+rho_wall = params['rho_wall']
+c_p_wall = params['c_p_wall']
+k_wall = params['k_wall']
+
 # ----------------------------------------
 # Generate the 2D mesh
 # ----------------------------------------
 
-mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
+mesh, cell_types = generate_composite_mesh(mesh_params, dimensions) 
+# Cell types: 0 = vapor core, 1 = wick, 2 = wall
 
-# preview the mesh (optional)
+logger.info("Mesh Generated")
+logger.info(f"Mesh shape: {mesh.shape}")
+
 # preview_mesh(mesh, title="2D Mesh Preview")
 
 # ----------------------------------------
@@ -53,17 +84,27 @@ mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
 T = CellVariable(name="Temperature", mesh=mesh, value=params["T_amb"])
 
 # ----------------------------------------
-# Define the effective thermal conductivity variable (will do later, now use constant k)
+# Define the spatially varying D coefficient 
 # ----------------------------------------
-# k = params["k"] # Constant thermal conductivity for now
-# getKEff(T, params) returns a FiPy-compatible array (or CellVariable value)
-# k_eff = CellVariable(name="Effective Thermal Conductivity", mesh=mesh, value=getKEff(T, params))
+
+# Create region masks from the cell_types variable
+is_vc   = (cell_types == 0)  # Vapor core
+is_wick = (cell_types == 1)  # Wick
+is_wall = (cell_types == 2)  # Wall
+
+# Compute region-specific thermal diffusivity alpha = k / (rho * c_p)
+alpha_vc   = k_vc / (rho_vc * c_p_vc)
+alpha_wick = k_wick / (rho_wick * c_p_wick)
+alpha_wall = k_wall / (rho_wall * c_p_wall)
+
+# Construct the spatially varying coefficient D
+D = alpha_vc * is_vc + alpha_wick * is_wick + alpha_wall * is_wall
 
 # ----------------------------------------
 # Define the PDE
 # ----------------------------------------
 
-eq = TransientTerm() == DiffusionTerm(coeff=1e-3)
+eq = TransientTerm(var=T) == DiffusionTerm(coeff=D, var=T)
 
 # ----------------------------------------
 # Apply boundary conditions
@@ -73,27 +114,29 @@ X, Y = mesh.faceCenters
 faces_evaporator = (mesh.facesTop & (X < params['L_e']))
 faces_condenser = (mesh.facesTop & ((X > params['L_e'] + params['L_a']) & (X < L_total)))
 
-# Mask previewing (optional)
 # preview_face_mask(mesh, faces_evaporator, title="Evaporator Face Mask")
 # preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask")
 
 n = mesh.faceNormals
-T.faceGrad.constrain(params['Q_input_flux']/params['k_wall'] * n, where=faces_evaporator)  # dT/dy = q_e/k_w (condenser heat input)
 
-T_rad = FaceVariable(mesh=mesh, value=T.faceValue)  # Radiative temperature at the faces
-q_rad = params['sigma'] * params['emissivity'] * (T_rad**4 - params['T_amb']**4)  # Radiative heat flux (W/m^2)
-T.faceGrad.constrain(-q_rad / params['k_wall'] * n, where=faces_condenser)  # dT/dy = -q_rad/k_w
+# dT/dy = q_e/k_w (condenser heat input)
+T.faceGrad.constrain(params['Q_input_flux']/params['k_wall'] * n, where=faces_evaporator)
+
+# dT/dy = -q_rad/k_w
+T_rad = FaceVariable(mesh=mesh, value=T.faceValue) # Radiative temperature at the faces
+q_rad = params['sigma'] * params['emissivity'] * (T_rad**4 - params['T_amb']**4) # Radiative heat flux (W/m^2)
+T.faceGrad.constrain(-q_rad / params['k_wall'] * n, where=faces_condenser)
 
 # ----------------------------------------
 # Initialize viewer
 # ----------------------------------------
 
 if __name__ == '__main__':
-    viewer = Viewer(vars=T)
-    viewer.plot()
+    # viewer = Viewer(vars=T)
+    # viewer.plot()
 
     # Matplotlib tripcolor viewer:
-    # fig, ax, tpc, triang = init_tripcolor_viewer(mesh)
+    fig, ax, tpc, triang = init_tripcolor_viewer(mesh)
 
 # ----------------------------------------
 # Time-stepping loop
@@ -124,16 +167,16 @@ for step in range(steps):
             try:
                 # Mayavi visualization:
                 
-                viewer.plot()
+                # viewer.plot()
                 
                 # Uncomment to save frames (Mayavi)
                 # viewer.plot(f"frames/frame_{step:04d}.png")
 
                 # Matplotlib.tripcolor visualization:
-                # tpc.set_array(T.value)
-                # tpc.set_clim(vmin=T.value.min(), vmax=T.value.max())
-                # ax.set_title(f"Step {step+1}, t = {step * time_step:.2f} s")
-                # plt.pause(0.003)  # Non-blocking draw
+                tpc.set_array(T.value)
+                tpc.set_clim(vmin=T.value.min(), vmax=T.value.max())
+                ax.set_title(f"Step {step+1}, t = {step * time_step:.2f} s")
+                plt.pause(0.003)  # Non-blocking draw
             except Exception as e:
                 logger.warning(f"Error during visualization: {e}")
     except Exception as e:
@@ -141,7 +184,7 @@ for step in range(steps):
         break
 
 # Matplotlib.tripcolor visualization:
-# plt.close(fig)
+plt.close(fig)
 
 # uncomment to save frames (Mayavi)
 # save_animation("frames", "output.mp4", fps=10)

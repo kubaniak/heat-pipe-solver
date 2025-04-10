@@ -39,10 +39,32 @@ from fipy import CellVariable
 from fipy.meshes.nonUniformGrid2D import NonUniformGrid2D
 import numpy as np
 
-def generate_composite_mesh(mesh_params, dimensions):
+def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUniformGrid2D, CellVariable]:
     """
-    Generate a composite FiPy mesh for a cylindrical heat pipe
-    with variable radial resolution (vapor core, wick, wall).
+    Generate a composite FiPy mesh for a cylindrical heat pipe with variable radial resolution.
+    The mesh consists of three regions: vapor core (vc), wick, and wall, each with its own radial resolution.
+
+    Parameters:
+        mesh_params (dict): Dictionary containing mesh parameters:
+            - "nx_wall" (int): Number of cells in the axial (x) direction for the wall region.
+            - "nr_wall" (int): Number of cells in the radial (y) direction for the wall region.
+            - "nx_wick" (int): Number of cells in the axial (x) direction for the wick region.
+            - "nr_wick" (int): Number of cells in the radial (y) direction for the wick region.
+            - "nx_vc" (int): Number of cells in the axial (x) direction for the vapor core region.
+            - "nr_vc" (int): Number of cells in the radial (y) direction for the vapor core region.
+
+        dimensions (dict): Dictionary containing geometric dimensions (all in meters):
+            - "R_wall" (float): Outer radius of the wall region.
+            - "R_wick" (float): Outer radius of the wick region.
+            - "R_vc" (float): Outer radius of the vapor core region.
+            - "L_e" (float): Length of the evaporator section.
+            - "L_a" (float): Length of the adiabatic section.
+            - "L_c" (float): Length of the condenser section.
+
+    Returns:
+        tuple: A tuple containing:
+            - mesh (NonUniformGrid2D): A FiPy NonUniformGrid2D mesh representing the composite geometry.
+            - cell_var (CellVariable): A FiPy CellVariable indicating the cell types (0 for vapor core, 1 for wick, 2 for wall).
     """
     # Unpack parameters
     nx = mesh_params["nx_wall"]
@@ -86,17 +108,19 @@ def generate_composite_mesh(mesh_params, dimensions):
     # Create non-uniform grid
     mesh = NonUniformGrid2D(dx=dx_array, dy=dy_array, nx=nx, ny=sum(nr.values()))
 
-    # Assign cell types
-    ny = sum(nr.values())
+    # Assign cell types based on cell centers' spatial coordinates
     cell_types = np.zeros(mesh.numberOfCells, dtype=int)
-    split1 = nr["vc"]
-    split2 = split1 + nr["wick"]
-
-    for i in range(nx):
-        base = i * ny
-        cell_types[base + split1:base + split2] = 1  # wick
-        cell_types[base + split2:base + ny] = 2      # wall
-
+    x, y = mesh.cellCenters  # Get coordinates of cell centers
+    
+    # Use y-coordinate to determine region
+    vc_mask = (y <= R["vc"])
+    wick_mask = (y > R["vc"]) & (y <= R["wick"])
+    wall_mask = (y > R["wick"])
+    
+    # Assign cell types based on region
+    cell_types[wick_mask] = 1  # wick
+    cell_types[wall_mask] = 2  # wall
+    
     cell_var = CellVariable(name="Cell Types", mesh=mesh, value=cell_types)
 
     return mesh, cell_var
@@ -129,13 +153,9 @@ if __name__ == '__main__':
     print(" - Number of x cells:", mesh.numberOfCells // (mesh_params["nr_vc"] + mesh_params["nr_wick"] + mesh_params["nr_wall"]))
     print(" - Total number of cells:", mesh.numberOfCells)
 
-    # Visualize the mesh
+    # Visualize the mesh using the standard preview
     import matplotlib.pyplot as plt
-
-    # Extract the coordinates of the cell centers
     x, y = mesh.cellCenters
-
-    # Plot the mesh
     plt.figure(figsize=(10, 5))
     plt.scatter(x, y, marker='o', color='b', s=10)
     plt.title('2D Cartesian Mesh')
@@ -144,3 +164,7 @@ if __name__ == '__main__':
     plt.grid(True)
     plt.axis('equal')
     plt.show()
+    
+    # Visualize the different regions using the preview_cell_types function
+    from utils import preview_cell_types
+    preview_cell_types(mesh, cell_types, title="Heat Pipe Regions Visualization")

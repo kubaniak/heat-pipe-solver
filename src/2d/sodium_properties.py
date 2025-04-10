@@ -169,7 +169,14 @@ def get_sodium_properties(state: str = 'vapor'):
         state: 'liquid' or 'vapor' to specify the state of sodium
         
     Returns:
-        Dictionary of interpolation functions for sodium properties
+        Dictionary of interpolation functions for sodium properties:
+        density - Density (kg/m³)
+        specific_heat - Specific heat (J/kg-K)
+        vapor_pressure - Vapor pressure (Pa)
+        viscosity - Dynamic viscosity (Pa-s)
+        heat_of_vaporization - Heat of vaporization (J/kg)
+        enthalpy - Enthalpy (J/kg)
+        thermal_conductivity - Thermal conductivity (W/m-K)
     """
     return {
         "density": get_density(state),
