@@ -13,8 +13,6 @@ def preview_mesh(mesh, title="2D Mesh Preview"):
 
     print("Mesh generated:")
     print("Number of cells:", mesh.numberOfCells)
-    print("Cell size dx:", mesh.dx)
-    print("Cell size dy:", mesh.dy)
     
     # Extract the coordinates of the cell centers
     x, y = mesh.cellCenters
@@ -70,6 +68,25 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     plt.colorbar(label='Mask Value')
     plt.legend()
     plt.show()
+
+def init_tripcolor_viewer(mesh):
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as tri
+    import numpy as np
+    
+    x = mesh.cellCenters[0]
+    y = mesh.cellCenters[1]
+    triang = tri.Triangulation(x, y)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    tpc = ax.tripcolor(triang, np.zeros_like(x), shading='gouraud', cmap="inferno")
+    cbar = fig.colorbar(tpc, ax=ax, label="Temperature [K]")
+
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    fig.tight_layout()
+
+    return fig, ax, tpc, triang
 
 def save_animation(frames_path, output_path, fps=10):
     """

@@ -67,6 +67,36 @@ def get_param(name, default=None):
     params = load_params()
     return params.get(name, default)
 
+def get_param_group(group_name):
+    """
+    Get a specific group of parameters by name.
+    
+    Args:
+        group_name (str): Name of the parameter group.
+    
+    Returns:
+        dict: Dictionary containing the parameters in the specified group.
+    """
+    # Read the original config file instead of the flattened parameters
+    if group_name is None:
+        return {}
+        
+    config_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'config', 'heat_pipe_config.json'
+    )
+    
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in configuration file: {config_file}")
+    
+    # Return the specific group if it exists, otherwise an empty dictionary
+    return config.get(group_name, {})
+
 def get_all_params():
     """
     Get all parameters.
