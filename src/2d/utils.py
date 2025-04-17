@@ -28,7 +28,6 @@ def preview_mesh(mesh, title="2D Mesh Preview"):
     plt.show()
 
 
-
 def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     """
     Overlays the face-based mask on top of the mesh plot.
@@ -128,6 +127,7 @@ def init_tripcolor_viewer(mesh):
     fig.tight_layout()
 
     return fig, ax, tpc, triang
+
 
 def save_animation(frames_path, output_path, fps=10):
     """

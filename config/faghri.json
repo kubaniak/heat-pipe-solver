@@ -3,11 +3,10 @@
         "Q_input": 119.0,
         "Q_input_flux": 26.77e3,
         "emissivity": 0.645,
-        "porosity": 0.7,
-        "sigma": 1.3806505e-23,
-        "k_wall": 21.06,
-        "rho_wall": 125.73,
-        "c_p_wall": 577.39,
+        "porosity_wick": 0.7,
+        "M_g_sodium": 0.02299,
+        "delta_T_sodium": 0.1,
+        "T_melting_sodium": 370.98,
         "T_amb": 290.0
     },
     "dimensions": {
@@ -27,9 +26,12 @@
         "nr_vc": 1,
         "base_size": 0.001
     },
-
+    "constants": {
+        "R": 8.314,
+        "sigma": 1.3806505e-23
+    },
     "simulation": {
-        "t_end": 1.0,
-        "dt": 0.01
+        "t_end": 2.0,
+        "dt": 0.02
     }
 }

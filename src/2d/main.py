@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 from mesh import generate_mesh_2d, generate_composite_mesh
 from params import get_all_params, get_param_group
 from utils import preview_mesh, preview_face_mask, save_animation, init_tripcolor_viewer
-from sodium_properties import get_sodium_properties
+from material_properties import get_sodium_properties, get_steel_properties, k_eff_vc, k_eff_wick, c_p_eff_wick, rho_eff_wick
 
 from fipy import __version__ as fipy_version
 logger.info(f"Using FiPy version: {fipy_version}")
@@ -33,6 +33,8 @@ logger.info(f"Using FiPy version: {fipy_version}")
 params = get_all_params()
 mesh_params = get_param_group('mesh')
 dimensions = get_param_group('dimensions')
+parameters = get_param_group('parameters')
+constants = get_param_group('constants')
 
 L_total = params['L_e'] + params['L_a'] + params['L_c']
 R_total = params['R_wall'] + params['R_wick'] + params['R_vc']
@@ -40,37 +42,21 @@ R_total = params['R_wall'] + params['R_wick'] + params['R_vc']
 logger.info("Parameters Loaded")
 
 # ----------------------------------------
-# Load sodium properties
+# Load material interpolators
 # ----------------------------------------
 
 sodium_properties = get_sodium_properties()
+steel_properties = get_steel_properties()
 
-logger.info("Sodium Properties Loaded")
-
-# ----------------------------------------
-# Define material properties
-# ----------------------------------------
-
-T_working = 800  # Example working temperature in Kelvin
-
-rho_vc = sodium_properties['density'](T_working)
-c_p_vc = sodium_properties['specific_heat'](T_working)
-k_vc = sodium_properties['thermal_conductivity'](T_working)
-
-rho_wick = params['porosity'] * rho_vc + (1 - params['porosity']) * params['rho_wall']
-c_p_wick = params['porosity'] * c_p_vc + (1 - params['porosity']) * params['c_p_wall']
-k_wick = params['porosity'] * k_vc + (1 - params['porosity']) * params['k_wall']
-
-rho_wall = params['rho_wall']
-c_p_wall = params['c_p_wall']
-k_wall = params['k_wall']
+logger.info("Material Properties Loaded")
 
 # ----------------------------------------
 # Generate the 2D mesh
 # ----------------------------------------
 
 mesh, cell_types = generate_composite_mesh(mesh_params, dimensions) 
-# Cell types: 0 = vapor core, 1 = wick, 2 = wall
+# Base radial types: vapor core=0, wick=10, wall=20
+# Add axial types: evaporator/condenser=+0, adiabatic=+1
 
 logger.info("Mesh Generated")
 logger.info(f"Mesh shape: {mesh.shape}")
@@ -84,21 +70,30 @@ logger.info(f"Mesh shape: {mesh.shape}")
 T = CellVariable(name="Temperature", mesh=mesh, value=params["T_amb"])
 
 # ----------------------------------------
+# Define material properties (Tempertaure-dependent!)
+# ----------------------------------------
+
+# Wall properties
+k_wall = steel_properties['thermal_conductivity'](T) # Cell types 20 and 21
+c_p_wall = steel_properties['specific_heat'](T) # Cell types 20 and 21
+rho_wall = steel_properties['density'](T) # Cell types 20 and 21
+
+# Wick properties: 
+k_wick = k_eff_wick(T, sodium_properties, steel_properties, parameters) # Cell types 10 and 11
+c_p_wick = c_p_eff_wick(T, sodium_properties, steel_properties, parameters) # Cell types 10 and 11
+rho_wick = rho_eff_wick(T, sodium_properties, steel_properties, parameters) # Cell types 10 and 11
+
+# Vapor core properties: 
+k_vc_evap_cond = k_eff_vc(T, 'evap_cond', sodium_properties, dimensions, parameters, constants) # Cell type 0
+k_vc_adiabatic = k_eff_vc(T, 'adiabatic', sodium_properties, dimensions, parameters, constants) # Cell type 1
+c_p_vc = sodium_properties['specific_heat'](T) # Cell types 0 and 1
+rho_vc = sodium_properties['density'](T) # Cell types 0 and 1
+
+# ----------------------------------------
 # Define the spatially varying D coefficient 
 # ----------------------------------------
 
-# Create region masks from the cell_types variable
-is_vc   = (cell_types == 0)  # Vapor core
-is_wick = (cell_types == 1)  # Wick
-is_wall = (cell_types == 2)  # Wall
 
-# Compute region-specific thermal diffusivity alpha = k / (rho * c_p)
-alpha_vc   = k_vc / (rho_vc * c_p_vc)
-alpha_wick = k_wick / (rho_wick * c_p_wick)
-alpha_wall = k_wall / (rho_wall * c_p_wall)
-
-# Construct the spatially varying coefficient D
-D = alpha_vc * is_vc + alpha_wick * is_wick + alpha_wall * is_wall
 
 # ----------------------------------------
 # Define the PDE

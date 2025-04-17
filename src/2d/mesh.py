@@ -2,7 +2,6 @@
 mesh.py
 
 This module contains functions to generate 2D meshes using FiPy.
-For now, we generate a simple Cartesian grid using Grid2D.
 """
 
 from fipy import Grid2D
@@ -112,15 +111,38 @@ def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUni
     cell_types = np.zeros(mesh.numberOfCells, dtype=int)
     x, y = mesh.cellCenters  # Get coordinates of cell centers
     
-    # Use y-coordinate to determine region
+    # Define radial regions
     vc_mask = (y <= R["vc"])
     wick_mask = (y > R["vc"]) & (y <= R["wick"])
     wall_mask = (y > R["wick"])
     
-    # Assign cell types based on region
-    cell_types[wick_mask] = 1  # wick
-    cell_types[wall_mask] = 2  # wall
+    # Define axial regions
+    evap_mask = (x <= dimensions["L_e"]) | (x >= dimensions["L_e"] + dimensions["L_a"])
+    adiabatic_mask = (x > dimensions["L_e"]) & (x < dimensions["L_e"] + dimensions["L_a"])
     
+    # Assign cell types based on both radial and axial regions
+    # Base radial types: vapor core=0, wick=10, wall=20
+    # Add axial types: evaporator/condenser=+0, adiabatic=+1
+    
+    # First set the base cell types for each radial region
+    cell_types[vc_mask] = 0     # vapor core base
+    cell_types[wick_mask] = 10  # wick base
+    cell_types[wall_mask] = 20  # wall base
+    
+    # Now apply axial conditions for all regions
+    # Vapor core regions
+    cell_types[vc_mask & evap_mask] = 0     # vapor core in evaporator/condenser sections
+    cell_types[vc_mask & adiabatic_mask] = 1  # vapor core in adiabatic section
+    
+    # Wick regions
+    cell_types[wick_mask & evap_mask] = 10    # wick in evaporator/condenser sections
+    cell_types[wick_mask & adiabatic_mask] = 11  # wick in adiabatic section
+    
+    # Wall regions
+    cell_types[wall_mask & evap_mask] = 20    # wall in evaporator/condenser sections
+    cell_types[wall_mask & adiabatic_mask] = 21  # wall in adiabatic section
+    
+    # Create a CellVariable for easy visualization
     cell_var = CellVariable(name="Cell Types", mesh=mesh, value=cell_types)
 
     return mesh, cell_var
