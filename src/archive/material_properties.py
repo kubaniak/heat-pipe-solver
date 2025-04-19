@@ -229,8 +229,52 @@ def get_tabulated_data() -> dict:
         "density_vapor": np.array([9.601e-10, 4.34e-7, 2.409e-5, 4.083e-4, 3.321e-3, 1.662e-2, 5.938e-2, 0.1663, 0.3889, 0.7928, 1.454, 2.455, 3.881, 5.820, 8.365, 11.63, 15.75, 20.96, 27.65, 36.71, 50.89, 99.75]),
         "c_p_liquid": np.array([31.58, 30.58, 29.87, 29.37, 29.05, 28.91, 28.94, 29.12, 29.45, 29.94, 30.58, 31.37, 32.32, 33.44, 34.85, 36.67, 39.14, 42.70, 48.30, 58.60, 84.75, 482.9]),
         "c_v_liquid": np.array([28.28, 26.46, 24.94, 23.66, 22.59, 21.71, 21.03, 20.54, 20.22, 20.07, 20.10, 20.30, 20.69, 21.27, 21.99, 22.88, 23.99, 25.45, 27.51, 30.91, 38.69, 135.8]),
-        "c_p_vapor": np.array([23.52, 30.27, 40.12, 49.66, 56.38, 59.70, 60.32, 59.37, 57.81, 56.26, 54.97, 53.92, 52.90, 51.88, 51.98, 53.55, 57.05, 63.60, 76.02, 103.4, 194.9, 4123.0]),
-        "c_v_vapor": np.array([15.16, 21.14, 29.45, 36.93, 41.57, 43.19, 42.66, 41.01, 38.93, 36.83, 34.83, 32.93, 31.07, 29.28, 28.05, 27.42, 27.39, 28.07, 29.85, 34.03, 47.20, 366.8]),
+        "c_p_vapor": npx.array([
+        860,
+        1250,
+        1800,
+        2280,
+        2590,
+        2720,
+        2700,
+        2620,
+        2510,
+        2430,
+        2390,
+        2360,
+        2340,
+        2410,
+        2460,
+        2530,
+        2660,
+        2910,
+        3400,
+        4470,
+        8030,
+    ]),
+        "c_v_vapor": npx.array([
+            490,
+            840,
+            1310,
+            1710,
+            1930,
+            1980,
+            1920,
+            1810,
+            1680,
+            1580,
+            1510,
+            1440,
+            1390,
+            1380,
+            1360,
+            1330,
+            1300,
+            1300,
+            1340,
+            1440,
+            1760
+            ]),
         "vapor_pressure": np.array([1.358e-10, 7.635e-8, 5.047e-6, 9.869e-5, 9.043e-4, 5.010e-3, 1.955e-2, 5.917e-2, 0.1482, 0.3209, 0.6203, 1.096, 1.798, 2.779, 4.087, 5.766, 7.851, 10.37, 13.36, 16.81, 20.76, 25.19]) * 1e6,
         "viscosity": np.array([0.614, 0.416, 0.320, 0.265, 0.229, 0.204, 0.185, 0.171, 0.160, 0.150, 0.142, 0.136, 0.130, 0.125, 0.120, 0.116, 0.112, 0.108, 0.105, 0.102, 0.0992, 0.0965]) * 1e-3,
         "heat_of_vaporization": np.array([103.3, 102.1, 100.6, 98.78, 96.77, 94.63, 92.47, 90.32, 88.17, 85.98, 83.68, 81.21, 78.53, 75.64, 72.49, 69.03, 65.15, 60.72, 55.48, 48.93, 39.69, 18.03]),
@@ -269,15 +313,15 @@ def get_symbolic_sodium_properties(tabulated_data: dict) -> dict:
     rho_fit_liquid = fit_and_generate_symbolic_function(T_data, rho_data_liquid, rho_liquid_model)
     
     # Specific Heat
-    T_data = np.arange(400, 2501, 100)
-    c_p_data_liquid = tabulated_data["c_p_liquid"]
-    c_v_data_liquid = tabulated_data["c_v_liquid"]
-    c_p_data_vapor = tabulated_data["c_p_vapor"]
+    T_data = np.arange(400, 2401, 100)
+    # c_p_data_liquid = tabulated_data["c_p_liquid"]
+    # c_v_data_liquid = tabulated_data["c_v_liquid"]
+    # c_p_data_vapor = tabulated_data["c_p_vapor"]
     c_v_data_vapor = tabulated_data["c_v_vapor"]
     c_model = lambda T, a, b, c, d, e, f, g: a + b * T + c * T**2 + d * T**3 + e * T**4 + f * T**5 + g * T**6
-    c_p_fit_liquid = fit_and_generate_symbolic_function(T_data, c_p_data_liquid, c_model)
-    c_v_fit_liquid = fit_and_generate_symbolic_function(T_data, c_v_data_liquid, c_model)
-    c_p_fit_vapor = fit_and_generate_symbolic_function(T_data, c_p_data_vapor, c_model)
+    # c_p_fit_liquid = fit_and_generate_symbolic_function(T_data, c_p_data_liquid, c_model)
+    # c_v_fit_liquid = fit_and_generate_symbolic_function(T_data, c_v_data_liquid, c_model)
+    # c_p_fit_vapor = fit_and_generate_symbolic_function(T_data, c_p_data_vapor, c_model)
     c_v_fit_vapor = fit_and_generate_symbolic_function(T_data, c_v_data_vapor, c_model)
 
     # Vapor Pressure
@@ -328,9 +372,9 @@ def get_symbolic_sodium_properties(tabulated_data: dict) -> dict:
     return {
         "density_liquid": rho_fit_liquid,
         "density_vapor": rho_fit_vapor,
-        "c_p_liquid": c_p_fit_liquid,
-        "c_p_vapor": c_p_fit_vapor,
-        "c_v_liquid": c_v_fit_liquid,
+        # "c_p_liquid": c_p_fit_liquid,
+        # "c_p_vapor": c_p_fit_vapor,
+        # "c_v_liquid": c_v_fit_liquid,
         "c_v_vapor": c_v_fit_vapor,
         "vapor_pressure": P_fit,
         "viscosity": mu_fit,
@@ -342,7 +386,7 @@ def get_symbolic_sodium_properties(tabulated_data: dict) -> dict:
 
 tabulated_data = get_tabulated_data()
 sodium_properties = get_symbolic_sodium_properties(tabulated_data)
-    
+
 def compare_tabulated_and_interpolated_data():
     """
     Compare tabulated sodium property data with the fitted symbolic functions by creating plots
@@ -351,24 +395,24 @@ def compare_tabulated_and_interpolated_data():
     import matplotlib.pyplot as plt
     
     # Temperature data points
-    T_data = np.arange(400, 2501, 100)
+    T_data = np.arange(400, 2401, 100)
     # Temperature range for smoother fitted curve
     T_fit = np.linspace(400, 2500, 1000)
     
     # Property names and labels for plotting
     properties = {
-        "density_liquid": ("Density of Liquid Sodium", "Density (kg/m³)"),
-        "density_vapor": ("Density of Sodium Vapor", "Density (kg/m³)"),
-        "c_p_liquid": ("Specific Heat (Cp) of Liquid Sodium", "Specific Heat (J/kg-K)"),
-        "c_p_vapor": ("Specific Heat (Cp) of Sodium Vapor", "Specific Heat (J/kg-K)"),
-        "c_v_liquid": ("Specific Heat (Cv) of Liquid Sodium", "Specific Heat (J/kg-K)"),
+        # "density_liquid": ("Density of Liquid Sodium", "Density (kg/m³)"),
+        # "density_vapor": ("Density of Sodium Vapor", "Density (kg/m³)"),
+        # "c_p_liquid": ("Specific Heat (Cp) of Liquid Sodium", "Specific Heat (J/kg-K)"),
+        # "c_p_vapor": ("Specific Heat (Cp) of Sodium Vapor", "Specific Heat (J/kg-K)"),
+        # "c_v_liquid": ("Specific Heat (Cv) of Liquid Sodium", "Specific Heat (J/kg-K)"),
         "c_v_vapor": ("Specific Heat (Cv) of Sodium Vapor", "Specific Heat (J/kg-K)"),
-        "vapor_pressure": ("Vapor Pressure of Sodium", "Pressure (Pa)"),
-        "viscosity": ("Dynamic Viscosity of Sodium", "Viscosity (Pa-s)"),
-        "heat_of_vaporization": ("Heat of Vaporization of Sodium", "Heat of Vaporization (J/kg)"),
-        "enthalpy_liquid": ("Enthalpy of Liquid Sodium", "Enthalpy (J/kg)"),
-        "enthalpy_vapor": ("Enthalpy of Sodium Vapor", "Enthalpy (J/kg)"),
-        "thermal_conductivity": ("Thermal Conductivity of Sodium", "Thermal Conductivity (W/m-K)")
+        # "vapor_pressure": ("Vapor Pressure of Sodium", "Pressure (Pa)"),
+        # "viscosity": ("Dynamic Viscosity of Sodium", "Viscosity (Pa-s)"),
+        # "heat_of_vaporization": ("Heat of Vaporization of Sodium", "Heat of Vaporization (J/kg)"),
+        # "enthalpy_liquid": ("Enthalpy of Liquid Sodium", "Enthalpy (J/kg)"),
+        # "enthalpy_vapor": ("Enthalpy of Sodium Vapor", "Enthalpy (J/kg)"),
+        # "thermal_conductivity": ("Thermal Conductivity of Sodium", "Thermal Conductivity (W/m-K)")
     }
     
     # Create plots for each property

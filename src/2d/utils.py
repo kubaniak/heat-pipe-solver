@@ -1,4 +1,6 @@
 from fipy import Grid2D
+from fipy.tools import numerix as npx
+from scipy.optimize import curve_fit
 
 
 def preview_mesh(mesh, title="2D Mesh Preview"):
@@ -127,6 +129,41 @@ def init_tripcolor_viewer(mesh):
     fig.tight_layout()
 
     return fig, ax, tpc, triang
+
+def compare_tabulated_and_interpolated_data(fit_function, tabulated_data):
+    """
+    Compare tabulated sodium property data with the fitted symbolic functions by creating a plot.
+    """
+    import matplotlib.pyplot as plt
+    
+    # Temperature data points
+    T_data = npx.arange(400, 2501, 100)
+    # Temperature range for smoother fitted curve
+    T_fit = npx.linspace(400, 2500, 1000)
+    
+    # Create a figure for the plots
+    # Calculate fitted values
+    fitted_values = npx.array([fit_function(T) for T in T_fit])
+    
+    # Create the plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(T_data, tabulated_data, 'o', label='Tabulated Data', markersize=5)
+    plt.plot(T_fit, fitted_values, '-', label='Fitted Curve', linewidth=2)
+    plt.xlabel('Temperature (K)')
+    plt.ylabel('Property Value')
+    plt.title('Comparison of Tabulated and Fitted Data')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def fit_and_generate_symbolic_function(T_data, Y_data, model_func):
+    params, _ = curve_fit(model_func, T_data, Y_data)
+    def symbolic(T):
+        return model_func(T, *params)
+    print(f"Fitted parameters: {params}")
+    return symbolic
 
 
 def save_animation(frames_path, output_path, fps=10):
