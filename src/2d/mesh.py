@@ -63,7 +63,7 @@ def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUni
     Returns:
         tuple: A tuple containing:
             - mesh (NonUniformGrid2D): A FiPy NonUniformGrid2D mesh representing the composite geometry.
-            - cell_var (CellVariable): A FiPy CellVariable indicating the cell types (0 for vapor core, 1 for wick, 2 for wall).
+            - cell_var (CellVariable): A FiPy CellVariable indicating the cell types (0 for vapor core, 10 for wick, 20 for wall, +1 for adiabatic).
     """
     # Unpack parameters
     nx = mesh_params["nx_wall"]

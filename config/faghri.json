@@ -1,7 +1,7 @@
 {
     "parameters": {
         "Q_input": 119.0,
-        "Q_input_flux": 26.77e3,
+        "Q_input_flux": 26.77e6,
         "emissivity": 0.645,
         "porosity_wick": 0.7,
         "M_g_sodium": 0.02299,
