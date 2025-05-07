@@ -12,7 +12,7 @@ def h_vap_sodium(T):
     return (393.37 * (1 - T / T_Na_crit) + 4398.6 * (1 - T / T_Na_crit)**0.28302) * 1e3
 
 def dPdT_sodium(T):
-    return (12633.73 / T**2 - 0.4672 / T) * npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T))
+    return (12633.73 / T**2 - 0.4672 / T) * npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
 
 def rho_sodium_v(T):
     return (h_vap_sodium(T) / (T * dPdT_sodium(T)) + 1 / rho_sodium_l(T))**-1
@@ -20,7 +20,7 @@ def rho_sodium_v(T):
 def k_sodium_s(T): return 135.6 - 0.167 * (T - 273.15)
 def k_sodium_l(T): return 124.67 - 0.11381 * T + 5.5226e-5 * T**2 - 1.1842e-8 * T**3
 
-def c_p_sodium_s(T): return 1199 + 0.649 * (T - 273.15) + 0.010529 * (T - 273.15)**2
+def c_p_sodium_s(T): return 1199 + 0.649 * (T - 273.15) + 1052.9e-5 * (T - 273.15)**2
 def c_p_sodium_l(T): return 1436.72 - 0.58 * (T - 273.15) + 4.672e-4 * (T - 273.15)**2
 
 def c_p_sodium_v(T):
@@ -32,7 +32,7 @@ def c_v_sodium_v(T):
             + 7.5215e-8 * T**4 - 2.3385e-11 * T**5 + 2.8403e-15 * T**6)
 
 def mu_sodium_v(T): return 6.083e-9 * T + 1.2606e-5
-def P_sat_sodium(T): return npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T))
+def P_sat_sodium(T): return npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
 
 def h_l_sodium(T):
     return (-365.77 + 1.6582 * T - 4.2395e-4 * T**2 + 1.4847e-7 * T**3 + 2992.6 / T) * 1e3
@@ -62,9 +62,12 @@ def rho_steel(T): return (7.9841 - 2.656e-4 * T - 1.158e-7 * T**2) * 1e3
 def k_steel(T): return (8.116e-2 + 1.618e-4 * T) * 100
 def c_p_steel(T): return 0.1348 * T + 469.47
 
+def rho_eff_steel(T): return rho_steel(T) + 3.75e6 / c_p_steel(T)
+
 def get_steel_properties():
     return {
-        'density': rho_steel,
+        'density_evap_adia': rho_eff_steel,
+        'density_cond': rho_steel,
         'thermal_conductivity': k_steel,
         'specific_heat': c_p_steel,
     }
@@ -93,7 +96,24 @@ def get_rho_Na_i(T, params, rho_l, rho_s):
            npx.where(T > T_m + dT, rho_l, interp))
 
 # --- Vapor Core Effective Properties ---
-def k_eff_vc(T, region, sodium_props, dims, params, consts):
+def Q_sonic(T, mesh, sodium_props, dims, consts):
+    """
+    Calculate the sonic heat transfer rate in the vapor core region.
+    """
+    X, Y = mesh.cellCenters
+    bottom_left_cell_idx = npx.argmin(X**2 + Y**2)
+    bottom_left_cell_mask = npx.zeros(mesh.numberOfCells, dtype=bool)
+    bottom_left_cell_mask[bottom_left_cell_idx] = True
+    T_v_0 = T.value[bottom_left_cell_mask][0]
+    rho_v_0 = sodium_props['density_vapor'](T_v_0) # density at the evaporator end cap
+    A_vc = npx.pi * dims['R_vc']**2
+    h_vap = sodium_props['heat_of_vaporization'](T)
+    gamma = sodium_props['specific_heat_vapor_pressure'](T) / sodium_props['specific_heat_vapor_volume'](T)
+    R_g = consts['R']
+
+    return (rho_v_0 * A_vc * h_vap * npx.sqrt(gamma * R_g * T_v_0)) / (npx.sqrt(2 * (gamma + 1)))
+
+def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
     R_v = dims['R_vc']
     mu = sodium_props['viscosity'](T)
     P = sodium_props['vapor_pressure'](T)
@@ -102,12 +122,25 @@ def k_eff_vc(T, region, sodium_props, dims, params, consts):
     h_l = sodium_props['enthalpy_liquid'](T)
     h_v = sodium_props['enthalpy_vapor'](T)
     h_vap = sodium_props['heat_of_vaporization'](T)
-
     factor = (2 * R_v / 3) * npx.sqrt((8 * R * T) / (npx.pi * M))
     base = (R_v**2 * P) / (4 if region == 'evap_cond' else 8) / mu + factor
     enthalpy = h_l if region == 'evap_cond' else h_v
 
-    return base * (enthalpy * h_vap * M**2 * P) / (R**2 * T**3)
+    k_eff = npx.abs(base * (enthalpy * h_vap * M**2 * P) / (R**2 * T**3))
+    # --- Sonic limit enforcement ---
+    # Q_sonic is a global limit, but we apply it locally for each cell
+    # Assume axial direction is x (index 0)
+    eps = 1e-12
+    A_c = npx.pi * R_v**2
+    # Compute |∇T_v,axial| (FiPy: T.grad[0])
+    grad_T_axial = npx.abs(T.grad[0]) + eps
+    # Q_sonic is a scalar
+    Q_sonic_val = Q_sonic(T, mesh, sodium_props, dims, consts)
+    # k_limit is a CellVariable (broadcast Q_sonic_val if needed)
+    k_limit = Q_sonic_val / (A_c * grad_T_axial)
+    # Enforce the limit
+    k_eff_limited = npx.minimum(k_eff, k_limit)
+    return k_eff_limited
 
 def get_vc_properties():
     return {
@@ -141,7 +174,7 @@ def rho_eff_wick(T, Na_props, steel_props, params):
     rho_s = Na_props['density_solid'](T)
     rho_Na_i = get_rho_Na_i(T, params, rho_l, rho_s)
     epsilon = params['porosity_wick']
-    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density'](T)
+    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density_cond'](T)
 
 def get_wick_properties():
     return {

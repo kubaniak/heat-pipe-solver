@@ -71,42 +71,40 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     plt.show()
 
 
-def preview_cell_types(mesh, cell_types, title="Heat Pipe Regions"):
+def preview_cell_mask(mesh, mask, title="Mesh with Cell Masks"):
     """
-    Visualizes the different regions of a heat pipe based on cell types.
+    Overlays the cell-based mask on top of the mesh plot.
 
     Parameters:
         mesh: The FiPy mesh object.
-        cell_types: CellVariable containing region markers (0 for vapor core, 1 for wick, 2 for wall).
+        mask: The CellVariable containing mask values defined on cells.
         title (str): Title of the plot.
     """
     import matplotlib.pyplot as plt
-    import numpy as np
-    
-    # Extract cell centers
-    x, y = mesh.cellCenters
-    
-    # Get cell type values
-    values = cell_types.value
-    
-    # Create figure
+
+    # First, plot the mesh using cell centers for context
+    x_cells, y_cells = mesh.cellCenters
     plt.figure(figsize=(10, 5))
-    
-    # Create a scatter plot with different colors for each region
-    # Using a custom colormap appropriate for distinct regions
-    regions = ['Vapor Core', 'Wick', 'Wall']
-    colors = ['lightblue', 'orange', 'gray']
-    
-    # Plot each region separately for better control and legend
-    for i, (region, color) in enumerate(zip(regions, colors)):
-        mask = (values == i)
-        plt.scatter(x[mask], y[mask], marker='o', color=color, s=10, label=region)
-    
+    plt.scatter(x_cells, y_cells, marker='o', color='lightgray', s=10, label='Cells')
+
+    # Get the mask values corresponding to each cell.
+    mask_values = mask.value
+
+    # We can plot only the cells where the mask is non-zero
+    nonzero = mask_values != 0
+
+    # Use a colormap to show different mask values (e.g., 1 vs 2).
+    # You could use a fixed color mapping if only a few values exist.
+    plt.scatter(x_cells[nonzero], y_cells[nonzero],
+                marker='s', s=50, c=mask_values[nonzero],
+                cmap='viridis', edgecolor='k', label='Mask')
+
     plt.title(title)
     plt.xlabel('x [m]')
     plt.ylabel('y [m]')
     plt.grid(True)
     plt.axis('equal')
+    plt.colorbar(label='Mask Value')
     plt.legend()
     plt.show()
 

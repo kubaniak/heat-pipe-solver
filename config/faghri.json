@@ -1,7 +1,7 @@
 {
     "parameters": {
         "Q_input": 119.0,
-        "Q_input_flux": 26.77e6,
+        "Q_input_flux": 26.77e3,
         "emissivity": 0.645,
         "porosity_wick": 0.7,
         "M_g_sodium": 0.02299,
@@ -15,8 +15,10 @@
         "R_vc": 0.01075,
         "L_e": 0.502,
         "L_a": 0.188,
-        "L_c": 0.292
-    },
+        "L_c": 0.292,
+        "L_input_left": 0.02,
+        "L_input_right": 0.073
+        },
     "mesh": {
         "nx_wall": 500,
         "nr_wall": 6,
@@ -31,7 +33,7 @@
         "sigma": 1.3806505e-23
     },
     "simulation": {
-        "t_end": 2.0,
+        "t_end": 1200.0,
         "dt": 0.02
     }
 }
