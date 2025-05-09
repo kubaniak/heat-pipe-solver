@@ -52,7 +52,7 @@ x_cell, y_cell = mesh.cellCenters
 # Define the primary variable (temperature)
 # ----------------------------------------
 
-T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"])
+T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=True)
 
 # ----------------------------------------
 # Define material properties (Tempertaure-dependent!)
@@ -68,7 +68,6 @@ rho_wall_cond = steel_properties['density_cond'](T) # CellTypes 20 and 21 and on
 k_wick = wick_properties['thermal_conductivity'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
 c_p_wick = wick_properties['specific_heat'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
 rho_wick = wick_properties['density'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-
 
 # Vapor core properties
 k_vc_evap_cond = vc_properties['thermal_conductivity'](T, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) # CellType 0
@@ -88,8 +87,11 @@ wall = (cell_types == 20) | (cell_types == 21)
 wall_cond = wall & (x_cell > dimensions['L_e'] + dimensions['L_a'])
 wall_evap_adia = wall & (x_cell < dimensions['L_e'] + dimensions['L_a']) # Wall in evaporator and adiabatic regions
 
-preview_cell_mask(mesh, wall_cond, title="Wall Condenser Region")
+# end_cap_mask = (cell_types == 0) & (x_cell < 0.001) 
+
+# preview_cell_mask(mesh, wall_cond, title="Wall Condenser Region")
 # preview_cell_mask(mesh, wall_evap_adia, title="Wall Evaporator and Adiabatic Region")
+# preview_cell_mask(mesh, end_cap_mask, title="End Cap Region")
 
 # Calculate D = k / (rho * c_p)
 D_expr = 0 * T
@@ -102,6 +104,31 @@ D_expr = D_expr + ((wick) * (k_wick / (rho_wick * c_p_wick + epsilon)))
 D_expr = D_expr + ((wall_cond) * (k_wall / (rho_wall_cond * c_p_wall + epsilon)))
 D_expr = D_expr + ((wall_evap_adia) * (k_wall / (rho_wall_evap_adia * c_p_wall + epsilon)))
 
+D_var = CellVariable(name="Diffusivity", mesh=mesh, value=D_expr, hasOld=True)
+
+# ----------------------------------------
+# Define CellVariables for k, rho, c_p for plotting
+# ----------------------------------------
+k_plot_expr = 0 * T
+k_plot_expr = k_plot_expr + (vc_evap_cond * k_vc_evap_cond)
+k_plot_expr = k_plot_expr + (vc_adiabatic * k_vc_adiabatic)
+k_plot_expr = k_plot_expr + (wick * k_wick)
+k_plot_expr = k_plot_expr + (wall * k_wall) # k_wall is the same for wall_cond and wall_evap_adia
+k_plot_var = CellVariable(name="ThermalConductivity", mesh=mesh, value=k_plot_expr, hasOld=True)
+
+rho_plot_expr = 0 * T
+rho_plot_expr = rho_plot_expr + ((vc_evap_cond | vc_adiabatic) * rho_vc) # rho_vc is same for both
+rho_plot_expr = rho_plot_expr + (wick * rho_wick)
+rho_plot_expr = rho_plot_expr + (wall_cond * rho_wall_cond)
+rho_plot_expr = rho_plot_expr + (wall_evap_adia * rho_wall_evap_adia)
+rho_plot_var = CellVariable(name="Density", mesh=mesh, value=rho_plot_expr, hasOld=True)
+
+cp_plot_expr = 0 * T
+cp_plot_expr = cp_plot_expr + ((vc_evap_cond | vc_adiabatic) * c_p_vc) # c_p_vc is same for both
+cp_plot_expr = cp_plot_expr + (wick * c_p_wick)
+cp_plot_expr = cp_plot_expr + (wall * c_p_wall) # c_p_wall is same for both
+cp_plot_var = CellVariable(name="SpecificHeat", mesh=mesh, value=cp_plot_expr, hasOld=True)
+
 # ----------------------------------------
 # Define the PDE
 # ----------------------------------------
@@ -112,80 +139,116 @@ eq = TransientTerm(var=T) == DiffusionTerm(coeff=D_expr, var=T)
 # Apply boundary conditions
 # ----------------------------------------
 
-X, Y = mesh.faceCenters
-faces_evaporator = (mesh.facesTop & ((X < dimensions['L_input_right']) & (X > dimensions['L_input_left'])))
-faces_condenser = (mesh.facesTop & ((X > dimensions['L_e'] + dimensions['L_a']) & (X < L_total)))
-faces_end_cap_vc = mesh.facesLeft & (Y <= dimensions['R_vc'])
+x_face, y_face = mesh.faceCenters
+faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x_face > dimensions['L_input_left'])))
+# faces_condenser = (mesh.facesTop & ((x_face > dimensions['L_e'] + dimensions['L_a']) & (x_face < L_total))) # Not used
 
-x_cell, y_cell = mesh.cellCenters
-cells_evaporator = (cell_types == 0) & (x_cell < dimensions['L_input_right']) & (x_cell > dimensions['L_input_left'])
-cells_condenser = (cell_types == 0) & ((x_cell > dimensions['L_e'] + dimensions['L_a']) & (x_cell < L_total))
+cells_evaporator = (cell_types == 0) & (x_cell < dimensions['L_input_right']) & (x_cell > dimensions['L_input_left']) # Not directly used for this BC
+# cells_condenser = (cell_types == 0) & ((x_cell > dimensions['L_e'] + dimensions['L_a']) & (x_cell < L_total)) # Not used
 
 # preview_face_mask(mesh, faces_evaporator, title="Evaporator Face Mask")
-# preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask")
+# preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask") # Condenser not used
 
 # Define face-normal unit vectors
 n = mesh.faceNormals
 
-# Apply the flux boundary condition at the evaporator faces
-# TODO: DISCUSS TAKING THE MEAN
-T_evap = T.value[cells_evaporator].mean()  # Get temperature values at the evaporator faces
-q_flux = parameters['Q_input_flux'] / steel_properties['thermal_conductivity'](T_evap)  # Calculate the heat flux (W/m^2)
-T.faceGrad.constrain(q_flux * n, where=faces_evaporator)
+# Calculate the volumetric heat source from the input flux (W/m^3)
+volumetric_heat_source_W_m3 = (faces_evaporator * parameters['Q_input_flux'] * n).divergence
 
-T_rad = T.value[cells_condenser].mean()  # Get temperature values at the condenser faces
-q_rad = constants['sigma'] * parameters['emissivity'] * (T_rad**4 - parameters['T_amb']**4) # Radiative heat flux (W/m^2)
-T.faceGrad.constrain(-q_rad / steel_properties['thermal_conductivity'](T_rad) * n, where=faces_condenser)
+# Get the rho * c_p for the wall cells in the evaporator region
+# These are CellVariables and will be evaluated cell by cell where the source is applied.
+# rho_wall_evap_adia and c_p_wall are already defined as CellVariable functions of T
+rho_cp_wall_evaporator = rho_wall_evap_adia * c_p_wall
+
+# Add a small epsilon to prevent division by zero if rho_cp could be zero.
+epsilon_source_denom = 1e-12 
+
+# Convert the volumetric heat source to K/s
+source_term_K_s = volumetric_heat_source_W_m3 / (rho_cp_wall_evaporator + epsilon_source_denom)
+
+# Re-define eq with the correctly scaled evaporator flux source term
+eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s)
+
+
+# Apply the radiative boundary condition at the condenser faces - IGNORED AS PER REQUEST
 
 # ----------------------------------------
 # Time-stepping loop
 # ----------------------------------------
 
-# if __name__ == "__main__":
-#     viewer = Viewer(vars=T, title="Temperature Distribution")
+# Variable to plot alongside Temperature. Options: "D_var", "k_plot_var", "rho_plot_var", "cp_plot_var"
+plot_selection = "D_var" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
 
-time_step = all_params['dt']
-steps = int(all_params['t_end'] / time_step)
+plottable_vars_map = {
+    "D_var": D_var,
+    "k_plot_var": k_plot_var,
+    "rho_plot_var": rho_plot_var,
+    "cp_plot_var": cp_plot_var
+}
+selected_aux_var = plottable_vars_map[plot_selection]
 
-temperature_evolution = []  # List to store temperature values over time
-time_values = []  # List to store time values
-measure_times = [500, 10000, 14000]  # Time points to measure temperature (t / dt)
+if __name__ == "__main__":
+    # Note: datamax might need adjustment based on the selected variable
+    viewer = Viewer(vars=(T, selected_aux_var), title=f"Temperature and {selected_aux_var.name} Distribution", datamin=0, datamax=3000)
 
-# Mask for vapor core cells (cell_types == 0)
-vapor_core_mask = (cell_types == 0)
+measure_times = [300, 400, 450, 4000, 6000, 8000]  # Time points to measure temperature (t / dt)
 
-# Prepare to store temperature profiles at measure_times
+# Find topmost wall cells: any face of the cell is a top face
+cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
+facesTop = npx.array(mesh.facesTop)        # shape: (nFaces,)
+
+# For each cell, check if any of its faces are top faces
+top_wall_mask = wall & npx.any(facesTop[cellFaceIDs], axis=0)
+
+# preview_cell_mask(mesh, top_wall_mask, title="Top Wall Cells")
+
+# Prepare to store temperature profiles at measure_times for top wall cells
 profiles = []
 profile_times = []
 
-# from fipy import LinearLUSolver
-# solver = LinearLUSolver(tolerance=1e-8, iterations=1000)
+# Setting up timestepping
+dt = all_params['dt']
+timestep = 0
+run_time = all_params['t_end']
+t = timestep * dt
 
-# Run the simulation and store T at measure_times
-T.setValue(all_params["T_amb"])  # Reset temperature
-for step in tqdm(range(steps)):
-    eq.solve(var=T, dt=time_step)
-    # viewer.plot()
-    if step in measure_times:
-        profiles.append(T.value[wall].copy())
-        profile_times.append(step * time_step)
+from fipy.solvers import LinearLUSolver
+solver = LinearLUSolver(tolerance=1e-8, iterations=1000)
 
+while t < run_time:
+    t += dt
+    timestep += 1
+    T.updateOld()
+    D_var.setValue(D_expr) # Explicitly update D_var after T changes
+    k_plot_var.setValue(k_plot_expr)
+    rho_plot_var.setValue(rho_plot_expr)
+    cp_plot_var.setValue(cp_plot_expr)
+    res = 1e+10
+    if timestep in measure_times:
+        profiles.append(T.value[top_wall_mask].copy())
+        profile_times.append(timestep * dt)
+    while res > 1e-4:
+        # print(f"Current T min: {T.min()}, T max: {T.max()}")
+        res = eq.sweep(dt=dt, solver=solver)
+    if __name__ == "__main__":
+        viewer.plot()
+    print(f"Time: {t:.2f} / {run_time:.2f} s")
 
-# Get x-coordinates for vapor core cells
-x_vapor = x_cell[vapor_core_mask]
+# Get x-coordinates for top wall cells
+x_top_wall = x_cell[top_wall_mask]
 
 # Sort by x for plotting
-sort_idx = x_vapor.argsort()
-x_vapor_sorted = x_vapor[sort_idx]
+sort_idx = x_top_wall.argsort()
+x_top_wall_sorted = x_top_wall[sort_idx]
 
 plt.figure(figsize=(10, 6))
 for i, (T_profile, t) in enumerate(zip(profiles, profile_times)):
-    plt.plot(x_vapor_sorted, T_profile[sort_idx], label=f"t = {t:.2f} s")
+    plt.plot(x_top_wall_sorted, T_profile[sort_idx], label=f"t = {t:.2f} s")
 plt.xlabel("x [m]")
 plt.ylabel("Temperature [K]")
-plt.title("Axial Temperature Profile in Vapor Core at Different Times")
+plt.title("Axial Temperature Profile in Topmost Wall Cells at Different Times")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("plots/vapor_core_axial_profiles.png", dpi=300)
+plt.savefig("plots/top_wall_axial_profiles.png", dpi=300)
 plt.show()

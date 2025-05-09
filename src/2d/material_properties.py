@@ -3,13 +3,14 @@ from fipy.tools import numerix as npx
 
 # --- Constants ---
 T_Na_crit = 2509.46  # K
+delta_H_melt = 113e3  # J/kg
 
 # --- Sodium: Solid, Liquid, Vapor Properties ---
 def rho_sodium_s(T): return 972.70 - 0.2154 * (T - 273.15)
 def rho_sodium_l(T): return 219 + 275.32 * (1 - T / T_Na_crit) + 511.58 * (1 - T / T_Na_crit)**0.5
 
 def h_vap_sodium(T):
-    return (393.37 * (1 - T / T_Na_crit) + 4398.6 * (1 - T / T_Na_crit)**0.28302) * 1e3
+    return (393.37 * (1 - T / T_Na_crit) + 4398.6 * (1 - T / T_Na_crit)**0.29302) * 1e3
 
 def dPdT_sodium(T):
     return (12633.73 / T**2 - 0.4672 / T) * npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
@@ -35,7 +36,7 @@ def mu_sodium_v(T): return 6.083e-9 * T + 1.2606e-5
 def P_sat_sodium(T): return npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
 
 def h_l_sodium(T):
-    return (-365.77 + 1.6582 * T - 4.2395e-4 * T**2 + 1.4847e-7 * T**3 + 2992.6 / T) * 1e3
+    return (-365.77 + 1.6582 * T - 4.2395e-4 * T**2 + 1.4847e-7 * T**3 + 2992.6 * T**-1) * 1e3
 
 def h_v_sodium(T): return h_l_sodium(T) + h_vap_sodium(T)
 
@@ -84,8 +85,8 @@ def get_k_Na_i(T, params, k_l, k_s):
 
 def get_c_p_Na_i(T, sodium_props, params, c_p_l, c_p_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
-    h_vap = sodium_props['heat_of_vaporization'](T)
-    mid_val = (c_p_s + c_p_l) / 2 + h_vap / (2 * dT)
+    h_melt = delta_H_melt
+    mid_val = (c_p_s + c_p_l) / 2 + h_melt / (2 * dT)
     return npx.where(T < T_m - dT, c_p_s,
            npx.where(T > T_m + dT, c_p_l, mid_val))
 
@@ -107,8 +108,8 @@ def Q_sonic(T, mesh, sodium_props, dims, consts):
     T_v_0 = T.value[bottom_left_cell_mask][0]
     rho_v_0 = sodium_props['density_vapor'](T_v_0) # density at the evaporator end cap
     A_vc = npx.pi * dims['R_vc']**2
-    h_vap = sodium_props['heat_of_vaporization'](T)
-    gamma = sodium_props['specific_heat_vapor_pressure'](T) / sodium_props['specific_heat_vapor_volume'](T)
+    h_vap = sodium_props['heat_of_vaporization'](T_v_0)
+    gamma = sodium_props['specific_heat_vapor_pressure'](T_v_0) / sodium_props['specific_heat_vapor_volume'](T_v_0)
     R_g = consts['R']
 
     return (rho_v_0 * A_vc * h_vap * npx.sqrt(gamma * R_g * T_v_0)) / (npx.sqrt(2 * (gamma + 1)))
@@ -126,7 +127,7 @@ def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
     base = (R_v**2 * P) / (4 if region == 'evap_cond' else 8) / mu + factor
     enthalpy = h_l if region == 'evap_cond' else h_v
 
-    k_eff = npx.abs(base * (enthalpy * h_vap * M**2 * P) / (R**2 * T**3))
+    k_eff = base * (enthalpy * h_vap * M**2 * P) / (R**2 * T**3)
     # --- Sonic limit enforcement ---
     # Q_sonic is a global limit, but we apply it locally for each cell
     # Assume axial direction is x (index 0)
