@@ -141,9 +141,8 @@ eq = TransientTerm(var=T) == DiffusionTerm(coeff=D_expr, var=T)
 
 x_face, y_face = mesh.faceCenters
 faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x_face > dimensions['L_input_left'])))
-# faces_condenser = (mesh.facesTop & ((x_face > dimensions['L_e'] + dimensions['L_a']) & (x_face < L_total))) # Not used
 
-cells_evaporator = (cell_types == 0) & (x_cell < dimensions['L_input_right']) & (x_cell > dimensions['L_input_left']) # Not directly used for this BC
+# cells_evaporator = (cell_types == 0) & (x_cell < dimensions['L_input_right']) & (x_cell > dimensions['L_input_left']) # Not directly used for this BC
 # cells_condenser = (cell_types == 0) & ((x_cell > dimensions['L_e'] + dimensions['L_a']) & (x_cell < L_total)) # Not used
 
 # preview_face_mask(mesh, faces_evaporator, title="Evaporator Face Mask")
@@ -170,14 +169,47 @@ source_term_K_s = volumetric_heat_source_W_m3 / (rho_cp_wall_evaporator + epsilo
 eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s)
 
 
-# Apply the radiative boundary condition at the condenser faces - IGNORED AS PER REQUEST
+# # Apply the radiative boundary condition at the condenser faces
+# sigma_sb = 5.670374419e-8  # Stefan-Boltzmann constant (W/m^2/K^4) - Corrected value
+# epsilon_rad = parameters['emissivity']
+# # T_amb is available in all_params['T_amb']
+
+# Define condenser faces (top faces in the condenser section)
+# x_face, L_total, dimensions['L_e'], dimensions['L_a'] are already defined
+faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
+# To verify the mask (optional):
+# preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask for Radiation")
+
+# # The radiative heat flux is q_rad = sigma_sb * epsilon_rad * (T_surface^4 - T_ambient^4)
+# # The boundary condition is -k_wall * (dT/dn) = q_rad
+# # So, dT/dn = -q_rad / k_wall
+# # Ensure all terms are evaluated at the faces for the constraint:
+# T_face = T.arithmeticFaceValue  # Temperature at the faces
+# k_wall_at_face = steel_properties['thermal_conductivity'](T_face)  # Wall thermal conductivity at the faces
+
+# radiative_numerator_at_face = sigma_sb * epsilon_rad * (T_face**4 - all_params['T_amb']**4)
+
+# # k_wall (CellVariable) is defined earlier. We use k_wall_at_face (FaceVariable) here.
+# # epsilon_k_denom is already defined.
+# epsilon_k_denom = 1e-12 # Ensure it's available here, though defined earlier
+
+# constraint_value_radiation_at_face = -radiative_numerator_at_face / (k_wall_at_face + epsilon_k_denom)
+# T.faceGrad.constrain(constraint_value_radiation_at_face, where=faces_condenser)
+
+volumetric_heat_sink_W_m3 = (faces_condenser * parameters['Q_output_flux'] * n).divergence
+
+rho_cp_wall_condenser = rho_wall_cond * c_p_wall
+
+sink_term_K_s = volumetric_heat_sink_W_m3 / (rho_cp_wall_condenser + epsilon_source_denom)
+
+eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s + sink_term_K_s)
 
 # ----------------------------------------
 # Time-stepping loop
 # ----------------------------------------
 
 # Variable to plot alongside Temperature. Options: "D_var", "k_plot_var", "rho_plot_var", "cp_plot_var"
-plot_selection = "D_var" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
+plot_selection = "cp_plot_var" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
 
 plottable_vars_map = {
     "D_var": D_var,
@@ -189,9 +221,9 @@ selected_aux_var = plottable_vars_map[plot_selection]
 
 if __name__ == "__main__":
     # Note: datamax might need adjustment based on the selected variable
-    viewer = Viewer(vars=(T, selected_aux_var), title=f"Temperature and {selected_aux_var.name} Distribution", datamin=0, datamax=3000)
+    viewer = Viewer(vars=(T, selected_aux_var), title=f"Temperature and {selected_aux_var.name} Distribution")
 
-measure_times = [300, 400, 450, 4000, 6000, 8000]  # Time points to measure temperature (t / dt)
+measure_times = [300, 400, 450]  # Time points to measure temperature (t / dt)
 
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
