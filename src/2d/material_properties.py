@@ -25,12 +25,12 @@ def c_p_sodium_s(T): return 1199 + 0.649 * (T - 273.15) + 1052.9e-5 * (T - 273.1
 def c_p_sodium_l(T): return 1436.72 - 0.58 * (T - 273.15) + 4.672e-4 * (T - 273.15)**2
 
 def c_p_sodium_v(T):
-    return (1.6105e4 - 111.33 * T + 0.2995 * T**2 - 3.7556e-4 * T**3
-            + 2.4188e-7 * T**4 - 7.7736e-11 * T**5 + 9.8924e-15 * T**6)
+    return (16105.174483770606 - 111.33277032117233 * T + 0.2994911138258808 * T**2 - 0.00037555960577985903 * T**3
+            + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 9.8924e-15 * T**6)
 
 def c_v_sodium_v(T):
-    return (2.9447e3 - 27.38 * T + 0.0893 * T**2 - 1.1764e-4 * T**3
-            + 7.5215e-8 * T**4 - 2.3385e-11 * T**5 + 2.8403e-15 * T**6)
+    return (2944.6696506593726 - 27.379453000849395 * T + 0.08934864074702555 * T**2 - 0.00011764446335597157 * T**3\
+             + 7.521494832758196e-08 * T**4 - 2.338468836342328e-11 * T**5 + 9.892389871569863e-15 * T**6)
 
 def mu_sodium_v(T): return 6.083e-9 * T + 1.2606e-5
 def P_sat_sodium(T): return npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
@@ -79,22 +79,25 @@ def _interp_linear(T, T_low, T_high, val_low, val_high):
 
 def get_k_Na_i(T, params, k_l, k_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
-    return npx.where(T < T_m - dT, k_s,
-           npx.where(T > T_m + dT, k_l,
-           _interp_linear(T, T_m - dT, T_m + dT, k_s, k_l)))
+    return k_s * (T < T_m - dT) + k_l * (T > T_m + dT) + _interp_linear(T, T_m - dT, T_m + dT, k_s, k_l) * ((T >= T_m - dT) & (T <= T_m + dT))
+    # return npx.where(T < T_m - dT, k_s,
+    #        npx.where(T > T_m + dT, k_l,
+    #        _interp_linear(T, T_m - dT, T_m + dT, k_s, k_l)))
 
 def get_c_p_Na_i(T, sodium_props, params, c_p_l, c_p_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
     h_melt = delta_H_melt
     mid_val = (c_p_s + c_p_l) / 2 + h_melt / (2 * dT)
-    return npx.where(T < T_m - dT, c_p_s,
-           npx.where(T > T_m + dT, c_p_l, mid_val))
+    return c_p_s * (T < T_m - dT) + c_p_l * (T > T_m + dT) + mid_val * ((T >= T_m - dT) & (T <= T_m + dT))
+    # return npx.where(T < T_m - dT, c_p_s,
+    #        npx.where(T > T_m + dT, c_p_l, mid_val))
 
 def get_rho_Na_i(T, params, rho_l, rho_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
     interp = _interp_linear(T, T_m - dT, T_m + dT, rho_s, rho_l)
-    return npx.where(T < T_m - dT, rho_s,
-           npx.where(T > T_m + dT, rho_l, interp))
+    return rho_s * (T < T_m - dT) + rho_l * (T > T_m + dT) + interp * ((T >= T_m - dT) & (T <= T_m + dT))
+    # return npx.where(T < T_m - dT, rho_s,
+    #        npx.where(T > T_m + dT, rho_l, interp))
 
 # --- Vapor Core Effective Properties ---
 def Q_sonic(T, mesh, sodium_props, dims, consts):
@@ -140,7 +143,7 @@ def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
     # k_limit is a CellVariable (broadcast Q_sonic_val if needed)
     k_limit = Q_sonic_val / (A_c * grad_T_axial)
     # Enforce the limit
-    k_eff_limited = npx.minimum(k_eff, k_limit)
+    k_eff_limited = k_eff * (k_eff <= k_limit) + k_limit * (k_eff > k_limit)
     return k_eff_limited
 
 def get_vc_properties():

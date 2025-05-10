@@ -89,9 +89,12 @@ wall_evap_adia = wall & (x_cell < dimensions['L_e'] + dimensions['L_a']) # Wall 
 
 # end_cap_mask = (cell_types == 0) & (x_cell < 0.001) 
 
+# preview_cell_mask(mesh, vc_evap_cond, title="Vapor Core Evaporator and Condenser Region")
+# preview_cell_mask(mesh, vc_adiabatic, title="Vapor Core Adiabatic Region")
+# preview_cell_mask(mesh, wick, title="Wick Region")
+# preview_cell_mask(mesh, wall, title="Wall Region")
 # preview_cell_mask(mesh, wall_cond, title="Wall Condenser Region")
 # preview_cell_mask(mesh, wall_evap_adia, title="Wall Evaporator and Adiabatic Region")
-# preview_cell_mask(mesh, end_cap_mask, title="End Cap Region")
 
 # Calculate D = k / (rho * c_p)
 D_expr = 0 * T
@@ -109,25 +112,25 @@ D_var = CellVariable(name="Diffusivity", mesh=mesh, value=D_expr, hasOld=True)
 # ----------------------------------------
 # Define CellVariables for k, rho, c_p for plotting
 # ----------------------------------------
-k_plot_expr = 0 * T
-k_plot_expr = k_plot_expr + (vc_evap_cond * k_vc_evap_cond)
-k_plot_expr = k_plot_expr + (vc_adiabatic * k_vc_adiabatic)
-k_plot_expr = k_plot_expr + (wick * k_wick)
-k_plot_expr = k_plot_expr + (wall * k_wall) # k_wall is the same for wall_cond and wall_evap_adia
-k_plot_var = CellVariable(name="ThermalConductivity", mesh=mesh, value=k_plot_expr, hasOld=True)
+k_expr = 0 * T
+k_expr = k_expr + (vc_evap_cond * k_vc_evap_cond)
+k_expr = k_expr + (vc_adiabatic * k_vc_adiabatic)
+k_expr = k_expr + (wick * k_wick)
+k_expr = k_expr + (wall * k_wall) # k_wall is the same for wall_cond and wall_evap_adia
+k_plot_var = CellVariable(name="ThermalConductivity", mesh=mesh, value=k_expr, hasOld=True)
 
-rho_plot_expr = 0 * T
-rho_plot_expr = rho_plot_expr + ((vc_evap_cond | vc_adiabatic) * rho_vc) # rho_vc is same for both
-rho_plot_expr = rho_plot_expr + (wick * rho_wick)
-rho_plot_expr = rho_plot_expr + (wall_cond * rho_wall_cond)
-rho_plot_expr = rho_plot_expr + (wall_evap_adia * rho_wall_evap_adia)
-rho_plot_var = CellVariable(name="Density", mesh=mesh, value=rho_plot_expr, hasOld=True)
+rho_expr = 0 * T
+rho_expr = rho_expr + ((vc_evap_cond | vc_adiabatic) * rho_vc) # rho_vc is same for both
+rho_expr = rho_expr + (wick * rho_wick)
+rho_expr = rho_expr + (wall_cond * rho_wall_cond)
+rho_expr = rho_expr + (wall_evap_adia * rho_wall_evap_adia)
+rho_plot_var = CellVariable(name="Density", mesh=mesh, value=rho_expr, hasOld=True)
 
-cp_plot_expr = 0 * T
-cp_plot_expr = cp_plot_expr + ((vc_evap_cond | vc_adiabatic) * c_p_vc) # c_p_vc is same for both
-cp_plot_expr = cp_plot_expr + (wick * c_p_wick)
-cp_plot_expr = cp_plot_expr + (wall * c_p_wall) # c_p_wall is same for both
-cp_plot_var = CellVariable(name="SpecificHeat", mesh=mesh, value=cp_plot_expr, hasOld=True)
+cp_expr = 0 * T
+cp_expr = cp_expr + ((vc_evap_cond | vc_adiabatic) * c_p_vc) # c_p_vc is same for both
+cp_expr = cp_expr + (wick * c_p_wick)
+cp_expr = cp_expr + (wall * c_p_wall) # c_p_wall is same for both
+cp_plot_var = CellVariable(name="SpecificHeat", mesh=mesh, value=cp_expr, hasOld=True)
 
 # ----------------------------------------
 # Define the PDE
@@ -141,6 +144,7 @@ eq = TransientTerm(var=T) == DiffusionTerm(coeff=D_expr, var=T)
 
 x_face, y_face = mesh.faceCenters
 faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x_face > dimensions['L_input_left'])))
+faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
 
 # cells_evaporator = (cell_types == 0) & (x_cell < dimensions['L_input_right']) & (x_cell > dimensions['L_input_left']) # Not directly used for this BC
 # cells_condenser = (cell_types == 0) & ((x_cell > dimensions['L_e'] + dimensions['L_a']) & (x_cell < L_total)) # Not used
@@ -160,25 +164,26 @@ volumetric_heat_source_W_m3 = (faces_evaporator * parameters['Q_input_flux'] * n
 rho_cp_wall_evaporator = rho_wall_evap_adia * c_p_wall
 
 # Add a small epsilon to prevent division by zero if rho_cp could be zero.
-epsilon_source_denom = 1e-12 
+eps = 1e-12 
 
-# Convert the volumetric heat source to K/s
-source_term_K_s = volumetric_heat_source_W_m3 / (rho_cp_wall_evaporator + epsilon_source_denom)
+# Convert the volumetric hvolumetric_heat_source_W_m3eat source to K/s
+source_term_K_s =  volumetric_heat_source_W_m3 / (rho_cp_wall_evaporator + eps)
 
 # Re-define eq with the correctly scaled evaporator flux source term
-eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s)
+eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + volumetric_heat_source_W_m3)
 
+
+# ------------------------------------------
+# Radiative boundary condition (Neumann) with sink term
+# ------------------------------------------
 
 # # Apply the radiative boundary condition at the condenser faces
 # sigma_sb = 5.670374419e-8  # Stefan-Boltzmann constant (W/m^2/K^4) - Corrected value
 # epsilon_rad = parameters['emissivity']
 # # T_amb is available in all_params['T_amb']
 
-# Define condenser faces (top faces in the condenser section)
-# x_face, L_total, dimensions['L_e'], dimensions['L_a'] are already defined
-faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
-# To verify the mask (optional):
-# preview_face_mask(mesh, faces_condenser, title="Condenser Face Mask for Radiation")
+# # Define condenser faces (top faces in the condenser section)
+# # x_face, L_total, dimensions['L_e'], dimensions['L_a'] are already defined
 
 # # The radiative heat flux is q_rad = sigma_sb * epsilon_rad * (T_surface^4 - T_ambient^4)
 # # The boundary condition is -k_wall * (dT/dn) = q_rad
@@ -190,38 +195,98 @@ faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_
 # radiative_numerator_at_face = sigma_sb * epsilon_rad * (T_face**4 - all_params['T_amb']**4)
 
 # # k_wall (CellVariable) is defined earlier. We use k_wall_at_face (FaceVariable) here.
-# # epsilon_k_denom is already defined.
-# epsilon_k_denom = 1e-12 # Ensure it's available here, though defined earlier
 
 # constraint_value_radiation_at_face = -radiative_numerator_at_face / (k_wall_at_face + epsilon_k_denom)
 # T.faceGrad.constrain(constraint_value_radiation_at_face, where=faces_condenser)
 
-volumetric_heat_sink_W_m3 = (faces_condenser * parameters['Q_output_flux'] * n).divergence
+# volumetric_heat_sink_W_m3 = (faces_condenser * parameters['Q_output_flux'] * n).divergence
 
-rho_cp_wall_condenser = rho_wall_cond * c_p_wall
+# rho_cp_wall_condenser = rho_wall_cond * c_p_wall
 
-sink_term_K_s = volumetric_heat_sink_W_m3 / (rho_cp_wall_condenser + epsilon_source_denom)
+# sink_term_K_s = volumetric_heat_sink_W_m3 / (rho_cp_wall_condenser + epsilon_source_denom)
 
-eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s + sink_term_K_s)
+# eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_expr, var=T) + source_term_K_s + sink_term_K_s)
+
+
+# ------------------------------------------
+# Convection boundary condition (Robin)
+# ------------------------------------------
+
+# Try with convective boundary condition (Robin)
+from fipy.terms.implicitSourceTerm import ImplicitSourceTerm
+
+# Define where to apply the Robin BC
+faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
+
+# Mask to apply only on those faces
+mask = FaceVariable(mesh=mesh, value=0.)
+mask.setValue(1., where=faces_condenser)
+
+# Heat transfer coefficient and ambient temperature
+h = 25  # [W/m²K], given
+T_amb = parameters['T_amb']  # Ambient temperature
+
+# Gamma and normal vector
+Gamma = FaceVariable(mesh=mesh, value=D_expr)  # temperature-dependent diffusivity
+Gamma.setValue(0., where=~faces_condenser)     # deactivate diffusion on non-condenser faces
+
+dPf = FaceVariable(mesh=mesh, value=mesh._faceToCellDistanceRatio * mesh.cellDistanceVectors)
+n = mesh.faceNormals
+
+# Robin BC terms
+a = FaceVariable(mesh=mesh, value=h * n, rank=1)       # a = h * n
+b = FaceVariable(mesh=mesh, value=k_expr.arithmeticFaceValue, rank=0)      # b = k(x), spatially varying
+g = FaceVariable(mesh=mesh, value=h * T_amb, rank=0)   # g = h * T_amb
+
+# Robin coefficient
+RobinCoeff = mask * D_expr.arithmeticFaceValue * n / (dPf.dot(a) + b)
+
+# Final equation with Robin boundary condition
+eqn = (TransientTerm(var=T) ==
+       DiffusionTerm(coeff=Gamma, var=T)
+       + source_term_K_s
+       + (RobinCoeff * g).divergence
+       - ImplicitSourceTerm(coeff=(RobinCoeff * a.dot(n)).divergence))
+
+
+# ----------------------------------------
+# guyer implementation for radiative boundary condition
+# ----------------------------------------
+
+# q_rad = constants['sigma'] * parameters['emissivity']  * (T.faceValue**4 - parameters['T_amb']**4)
+
+# rho_cp_wall_evaporator = rho_wall_evap_adia * c_p_wall
+# rho_cp_wall_condenser = rho_wall_cond * c_p_wall
+
+# source_term_K_s = (((faces_evaporator * parameters['Q_input_flux'] * n).divergence) / (rho_cp_wall_evaporator + eps))
+# sink_term_K_s = (((faces_condenser * q_rad * n).divergence) / (rho_cp_wall_condenser + eps))
+
+# eq = TransientTerm(var=T) == (DiffusionTerm(coeff=D_var, var=T)
+#                               + source_term_K_s
+#                               + sink_term_K_s)
+
 
 # ----------------------------------------
 # Time-stepping loop
 # ----------------------------------------
 
 # Variable to plot alongside Temperature. Options: "D_var", "k_plot_var", "rho_plot_var", "cp_plot_var"
-plot_selection = "cp_plot_var" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
+plot_selection = "T" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
 
 plottable_vars_map = {
     "D_var": D_var,
     "k_plot_var": k_plot_var,
     "rho_plot_var": rho_plot_var,
-    "cp_plot_var": cp_plot_var
+    "cp_plot_var": cp_plot_var,
+    "T": T
 }
 selected_aux_var = plottable_vars_map[plot_selection]
 
-if __name__ == "__main__":
-    # Note: datamax might need adjustment based on the selected variable
-    viewer = Viewer(vars=(T, selected_aux_var), title=f"Temperature and {selected_aux_var.name} Distribution")
+# if __name__ == "__main__":
+#     if plot_selection == "T":
+#         viewer = Viewer(vars=T, title="Temperature Distribution")
+#     else:
+#         viewer = Viewer(vars=(T, selected_aux_var), title=f"Temperature and {selected_aux_var.name} Distribution")
 
 measure_times = [300, 400, 450]  # Time points to measure temperature (t / dt)
 
@@ -252,9 +317,9 @@ while t < run_time:
     timestep += 1
     T.updateOld()
     D_var.setValue(D_expr) # Explicitly update D_var after T changes
-    k_plot_var.setValue(k_plot_expr)
-    rho_plot_var.setValue(rho_plot_expr)
-    cp_plot_var.setValue(cp_plot_expr)
+    # k_plot_var.setValue(k_expr)
+    # rho_plot_var.setValue(rho_expr)
+    # cp_plot_var.setValue(cp_expr)
     res = 1e+10
     if timestep in measure_times:
         profiles.append(T.value[top_wall_mask].copy())
@@ -262,8 +327,8 @@ while t < run_time:
     while res > 1e-4:
         # print(f"Current T min: {T.min()}, T max: {T.max()}")
         res = eq.sweep(dt=dt, solver=solver)
-    if __name__ == "__main__":
-        viewer.plot()
+    # if __name__ == "__main__":
+    #     viewer.plot()
     print(f"Time: {t:.2f} / {run_time:.2f} s")
 
 # Get x-coordinates for top wall cells

@@ -180,12 +180,10 @@ def main():
         T_data, 
         c_p_data, 
         model_func, 
-        "Specific Heat Capacity of Steel", 
-        "J/(kg*K)", 
+        "Specific Heat Capacity of Steel",
+        "J/(kg*K)",
         use_log_scale=False
     )
-    
-    # Print a formatted string for the model function with fitted parameters
     a, b = params
     print(f"\nFitted model equation:")
     print(f"c_p(T) = {a:.4f} * T + {b:.4f}")
