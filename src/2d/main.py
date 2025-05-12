@@ -243,30 +243,30 @@ vc_adiabatic_faces = vc_faces & ((x_face > (dimensions['L_e'])) & (x_face < dime
 # preview_face_mask(mesh, vc_evap_cond_faces, title="Vapor Core Evaporator and Condenser Faces")
 # preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
 
-cp = CellVariable(mesh=mesh, value=1.)
-rho = CellVariable(mesh=mesh, value=1.)
+cp = FaceVariable(mesh=mesh, value=1.)
+rho = FaceVariable(mesh=mesh, value=1.)
 k = FaceVariable(mesh=mesh, value=1.)
 D = FaceVariable(mesh=mesh, value=1.)
 
-D.setValue((k_wall / (rho_wall_cond * c_p_wall)).harmonicFaceValue, where=wall_cond_faces)
-D.setValue((k_wall / (rho_wall_evap_adia * c_p_wall)).harmonicFaceValue, where=wall_evap_adia_faces)
-D.setValue((k_wick / (rho_wick * c_p_wick)).harmonicFaceValue, where=wick_faces)
-D.setValue((k_vc_evap_cond / (rho_vc * c_p_vc)).harmonicFaceValue, where=vc_evap_cond_faces)
-D.setValue((k_vc_adiabatic / (rho_vc * c_p_vc)).harmonicFaceValue, where=vc_adiabatic_faces)
+# D.setValue((k_wall_face / (rho_wall_cond_face * c_p_wall_face)), where=wall_cond_faces)
+# D.setValue((k_wall_face / (rho_wall_evap_adia_face * c_p_wall_face)), where=wall_evap_adia_faces)
+# D.setValue((k_wick_face / (rho_wick_face * c_p_wick_face)), where=wick_faces)
+# D.setValue((k_vc_evap_cond_face / (rho_vc_face * c_p_vc_face)), where=vc_evap_cond_faces)
+# D.setValue((k_vc_adiabatic_face / (rho_vc_face * c_p_vc_face)), where=vc_adiabatic_faces)
 
-cp.setValue(c_p_wall, where=wall_cells)
-cp.setValue(c_p_wick, where=wick_cells)
-cp.setValue(c_p_vc, where=vc_cells)
+# cp.setValue(c_p_wall_face, where=wall_faces)
+# cp.setValue(c_p_wick_face, where=wick_faces)
+# cp.setValue(c_p_vc_face, where=vc_faces)
 
-rho.setValue(rho_wall_evap_adia, where=wall_evap_adia_cells)
-rho.setValue(rho_wall_cond, where=wall_cond_cells)
-rho.setValue(rho_wick, where=wick_cells)
-rho.setValue(rho_vc, where=vc_cells)
+# rho.setValue(rho_wall_evap_adia_face, where=wall_evap_adia_faces)
+# rho.setValue(rho_wall_cond_face, where=wall_cond_faces)
+# rho.setValue(rho_wick_face, where=wick_faces)
+# rho.setValue(rho_vc_face, where=vc_faces)
 
-k.setValue(k_wall.harmonicFaceValue, where=wall_faces)
-k.setValue(k_wick.harmonicFaceValue, where=wick_faces)
-k.setValue(k_vc_evap_cond.harmonicFaceValue, where=vc_evap_cond_faces)
-k.setValue(k_vc_adiabatic.harmonicFaceValue, where=vc_adiabatic_faces)
+# k.setValue(k_wall_face, where=wall_faces)
+# k.setValue(k_wick_face, where=wick_faces)
+# k.setValue(k_vc_evap_cond_face, where=vc_evap_cond_faces)
+# k.setValue(k_vc_adiabatic_face, where=vc_adiabatic_faces)
 
 # D = k / (rho * cp + eps)
 
@@ -302,8 +302,8 @@ T.setValue(all_params["T_amb"])
 # Define the PDE
 # ----------------------------------------
 
-eq = TransientTerm(var=T) == DiffusionTerm(coeff=D, var=T)
-# eq = TransientTerm(var=T, coeff=rho*cp) == DiffusionTerm(coeff=k, var=T)
+# eq = TransientTerm(var=T) == DiffusionTerm(coeff=D, var=T)
+eq = TransientTerm(var=T, coeff=rho_expr*cp_expr) == DiffusionTerm(coeff=k_expr, var=T)
 
 # ----------------------------------------
 # Dirichlet at condenser
@@ -374,7 +374,9 @@ while t < run_time:
     # if timestep % 20 == 0:
     #     if __name__ == "__main__":
     #         viewer.plot()
-    print(f"Time: {t:.2f} / {run_time:.2f} s")
+    # print(f"Time: {t:.2f} / {run_time:.2f} s")
+
+print(f"Final time: {t:.2f} / {run_time:.2f} s")
 
 # Get x-coordinates for top wall cells
 x_top_wall = x_cell[top_wall_mask]
