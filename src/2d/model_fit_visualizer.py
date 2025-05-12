@@ -151,42 +151,48 @@ def main():
     """
     # Example: Fit a model to sodium vapor density data
     # Define the data
-    T_data = np.arange(300, 1701, 100)
+    T_data = np.arange(400, 2401, 100)
     
     # This is just example data - replace with your actual data
     c_p_data = np.array([
-        510.0296,
-        523.4184,
-        536.8072,
-        550.196,
-        564.0032,
-        577.392,
-        590.7808,
-        604.1696,
-        617.5584,
-        631.3656,
-        644.7544,
-        658.1432,
-        671.532,
-        685.3392,
-        698.728
+        490, 
+        830,
+        1310,
+        1710,
+        1930,
+        1980,
+        1920,
+        1810,
+        1680,
+        1580,
+        1510,
+        1440,
+        1390,
+        1380,
+        1360,
+        1330,
+        1300,
+        1300,
+        1340,
+        1440,
+        1760
     ])
     
     # Get a model function
-    model_func = get_model_function('linear')
+    model_func = get_model_function('polynomial_6')
     
     # Analyze the property
     params = analyze_property(
         T_data, 
         c_p_data, 
         model_func, 
-        "Specific Heat Capacity of Steel",
+        "Specific Heat Capacity of Vapor Sodium",
         "J/(kg*K)",
         use_log_scale=False
     )
-    a, b = params
+    # a, b = params
     print(f"\nFitted model equation:")
-    print(f"c_p(T) = {a:.4f} * T + {b:.4f}")
+    # print(f"c_p(T) = {a:.4f} * T + {b:.4f}")
 
 if __name__ == "__main__":
     main()

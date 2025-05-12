@@ -41,24 +41,22 @@ def preview_face_mask(mesh, mask, title="Mesh with Face Masks"):
     """
     import matplotlib.pyplot as plt
 
-    # First, plot the mesh using cell centers for context
-    x_cells, y_cells = mesh.cellCenters
-    plt.figure(figsize=(10, 5))
-    plt.scatter(x_cells, y_cells, marker='o', color='lightgray', s=10, label='Cells')
-
     # Extract the face centers to locate the mask values.
     x_faces, y_faces = mesh.faceCenters
+    plt.figure(figsize=(10, 5))
+    plt.scatter(x_faces, y_faces, marker='o', color='lightgray', s=10, label='Faces')
 
-    # Get the mask values corresponding to each face.
-    mask_values = mask.value
+    x_cells, y_cells = mesh.cellCenters
+    plt.scatter(x_cells, y_cells, marker='o', color='red', s=10, label='Cells')
+
 
     # We can plot only the faces where the mask is non-zero
-    nonzero = mask_values != 0
+    nonzero = mask != 0
 
     # Use a colormap to show different mask values (e.g., 1 vs 2).
     # You could use a fixed color mapping if only a few values exist.
     plt.scatter(x_faces[nonzero], y_faces[nonzero],
-                marker='s', s=50, c=mask_values[nonzero],
+                marker='s', s=50, c=mask[nonzero],
                 cmap='viridis', edgecolor='k', label='Mask')
 
     plt.title(title)

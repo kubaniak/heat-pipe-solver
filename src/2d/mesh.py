@@ -36,6 +36,7 @@ from fipy import Grid2D, CellVariable
 
 from fipy import CellVariable
 from fipy.meshes.nonUniformGrid2D import NonUniformGrid2D
+from fipy.meshes.cylindricalNonUniformGrid2D import CylindricalNonUniformGrid2D
 import numpy as np
 
 def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUniformGrid2D, CellVariable]:
@@ -105,7 +106,7 @@ def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUni
     dx_array = np.diff(vertices_x)
 
     # Create non-uniform grid
-    mesh = NonUniformGrid2D(dx=dx_array, dy=dy_array, nx=nx, ny=sum(nr.values()))
+    mesh = CylindricalNonUniformGrid2D(dx=dx_array, dy=dy_array, nx=nx, ny=sum(nr.values()))
 
     # Assign cell types based on cell centers' spatial coordinates
     cell_types = np.zeros(mesh.numberOfCells, dtype=int)
@@ -186,7 +187,3 @@ if __name__ == '__main__':
     plt.grid(True)
     plt.axis('equal')
     plt.show()
-    
-    # Visualize the different regions using the preview_cell_types function
-    from utils import preview_cell_types
-    preview_cell_types(mesh, cell_types, title="Heat Pipe Regions Visualization")

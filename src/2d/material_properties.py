@@ -26,7 +26,7 @@ def c_p_sodium_l(T): return 1436.72 - 0.58 * (T - 273.15) + 4.672e-4 * (T - 273.
 
 def c_p_sodium_v(T):
     return (16105.174483770606 - 111.33277032117233 * T + 0.2994911138258808 * T**2 - 0.00037555960577985903 * T**3
-            + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 9.8924e-15 * T**6)
+            + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 2.8698379132831126e-15 * T**6)
 
 def c_v_sodium_v(T):
     return (2944.6696506593726 - 27.379453000849395 * T + 0.08934864074702555 * T**2 - 0.00011764446335597157 * T**3\
@@ -80,44 +80,37 @@ def _interp_linear(T, T_low, T_high, val_low, val_high):
 def get_k_Na_i(T, params, k_l, k_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
     return k_s * (T < T_m - dT) + k_l * (T > T_m + dT) + _interp_linear(T, T_m - dT, T_m + dT, k_s, k_l) * ((T >= T_m - dT) & (T <= T_m + dT))
-    # return npx.where(T < T_m - dT, k_s,
-    #        npx.where(T > T_m + dT, k_l,
-    #        _interp_linear(T, T_m - dT, T_m + dT, k_s, k_l)))
 
 def get_c_p_Na_i(T, sodium_props, params, c_p_l, c_p_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
     h_melt = delta_H_melt
     mid_val = (c_p_s + c_p_l) / 2 + h_melt / (2 * dT)
     return c_p_s * (T < T_m - dT) + c_p_l * (T > T_m + dT) + mid_val * ((T >= T_m - dT) & (T <= T_m + dT))
-    # return npx.where(T < T_m - dT, c_p_s,
-    #        npx.where(T > T_m + dT, c_p_l, mid_val))
 
 def get_rho_Na_i(T, params, rho_l, rho_s):
     T_m, dT = params['T_melting_sodium'], params['delta_T_sodium']
     interp = _interp_linear(T, T_m - dT, T_m + dT, rho_s, rho_l)
     return rho_s * (T < T_m - dT) + rho_l * (T > T_m + dT) + interp * ((T >= T_m - dT) & (T <= T_m + dT))
-    # return npx.where(T < T_m - dT, rho_s,
-    #        npx.where(T > T_m + dT, rho_l, interp))
 
 # --- Vapor Core Effective Properties ---
-def Q_sonic(T, mesh, sodium_props, dims, consts):
+def get_Q_sonic(T, end_cap_mask, mesh, sodium_props, dims, consts):
     """
     Calculate the sonic heat transfer rate in the vapor core region.
     """
-    X, Y = mesh.cellCenters
-    bottom_left_cell_idx = npx.argmin(X**2 + Y**2)
-    bottom_left_cell_mask = npx.zeros(mesh.numberOfCells, dtype=bool)
-    bottom_left_cell_mask[bottom_left_cell_idx] = True
-    T_v_0 = T.value[bottom_left_cell_mask][0]
+    T_v_0 = npx.sum(T * end_cap_mask) / npx.sum(end_cap_mask)
     rho_v_0 = sodium_props['density_vapor'](T_v_0) # density at the evaporator end cap
     A_vc = npx.pi * dims['R_vc']**2
-    h_vap = sodium_props['heat_of_vaporization'](T_v_0)
-    gamma = sodium_props['specific_heat_vapor_pressure'](T_v_0) / sodium_props['specific_heat_vapor_volume'](T_v_0)
+    h_vap = sodium_props['heat_of_vaporization'](T)
+    gamma = sodium_props['specific_heat_vapor_pressure'](T) / sodium_props['specific_heat_vapor_volume'](T)
     R_g = consts['R']
 
-    return (rho_v_0 * A_vc * h_vap * npx.sqrt(gamma * R_g * T_v_0)) / (npx.sqrt(2 * (gamma + 1)))
+    Q = CellVariable(mesh=mesh, 
+                     value=(rho_v_0 * A_vc * h_vap * npx.sqrt(gamma * R_g * T_v_0)) / (npx.sqrt(2 * (gamma + 1))),
+                     name='Q_sonic')
 
-def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
+    return Q
+
+def k_eff_vc(T, end_cap_mask, mesh, region, sodium_props, dims, params, consts):
     R_v = dims['R_vc']
     mu = sodium_props['viscosity'](T)
     P = sodium_props['vapor_pressure'](T)
@@ -131,20 +124,24 @@ def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
     enthalpy = h_l if region == 'evap_cond' else h_v
 
     k_eff = base * (enthalpy * h_vap * M**2 * P) / (R**2 * T**3)
+    return k_eff
     # --- Sonic limit enforcement ---
     # Q_sonic is a global limit, but we apply it locally for each cell
     # Assume axial direction is x (index 0)
     eps = 1e-12
     A_c = npx.pi * R_v**2
-    # Compute |∇T_v,axial| (FiPy: T.grad[0])
+    # Compute |∇T_v,axial| (FiPy: T.grad[0]) (numpy: npx.gradient(T)[0])
     grad_T_axial = npx.abs(T.grad[0]) + eps
-    # Q_sonic is a scalar
-    Q_sonic_val = Q_sonic(T, mesh, sodium_props, dims, consts)
-    # k_limit is a CellVariable (broadcast Q_sonic_val if needed)
-    k_limit = Q_sonic_val / (A_c * grad_T_axial)
+    # grad_T_axial = npx.gradient(T)[0] + eps
+    # Q_sonic is a CellVariable
+    Q_sonic = get_Q_sonic(T, end_cap_mask, mesh, sodium_props, dims, consts)
+    # k_limit is a CellVariable
+    k_limit = Q_sonic / (A_c * grad_T_axial)
     # Enforce the limit
     k_eff_limited = k_eff * (k_eff <= k_limit) + k_limit * (k_eff > k_limit)
     return k_eff_limited
+
+    
 
 def get_vc_properties():
     return {
