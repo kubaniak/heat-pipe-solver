@@ -14,6 +14,12 @@ from params import get_all_params, get_param_group
 from utils import preview_mesh, preview_face_mask, save_animation, init_tripcolor_viewer, preview_cell_mask
 from material_properties import get_sodium_properties, get_steel_properties, get_vc_properties, get_wick_properties
 
+import logging
+log = logging.getLogger("fipy")
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+log.addHandler(console)
+
 # ----------------------------------------
 # Load parameters from configuration file
 # ----------------------------------------
@@ -62,32 +68,32 @@ end_cap_mask = (cell_types == 0) & (x_cell < 0.001)
 # preview_cell_mask(mesh, end_cap_mask, title="End Cap Mask")
 
 # Wall properties
-k_wall = steel_properties['thermal_conductivity'](T) # CellTypes 20 and 21
-k_wall_face = steel_properties['thermal_conductivity'](T.faceValue) # CellTypes 20 and 21
-c_p_wall = steel_properties['specific_heat'](T) # CellTypes 20 and 21
-c_p_wall_face = steel_properties['specific_heat'](T.faceValue) # CellTypes 20 and 21
-rho_wall_evap_adia = steel_properties['density_evap_adia'](T) # CellTypes 20 and 21 and only in the evaporator and adiabatic regions
-rho_wall_evap_adia_face = steel_properties['density_evap_adia'](T.faceValue) # CellTypes 20 and 21 and only in the evaporator and adiabatic regions
-rho_wall_cond = steel_properties['density_cond'](T) # CellTypes 20 and 21 and only in the condenser region
-rho_wall_cond_face = steel_properties['density_cond'](T.faceValue) # CellTypes 20 and 21 and only in the condenser region
+k_wall_cell = steel_properties['thermal_conductivity'](T) # CellTypes 20 and 21
+k_wall_face = steel_properties['thermal_conductivity'](T.harmonicFaceValue) # CellTypes 20 and 21
+c_p_wall_cell = steel_properties['specific_heat'](T) # CellTypes 20 and 21
+c_p_wall_face = steel_properties['specific_heat'](T.harmonicFaceValue) # CellTypes 20 and 21
+rho_wall_evap_adia_cell = steel_properties['density_evap_adia'](T) # CellTypes 20 and 21 and only in the evaporator and adiabatic regions
+rho_wall_evap_adia_face = steel_properties['density_evap_adia'](T.harmonicFaceValue) # CellTypes 20 and 21 and only in the evaporator and adiabatic regions
+rho_wall_cond_cell = steel_properties['density_cond'](T) # CellTypes 20 and 21 and only in the condenser region
+rho_wall_cond_face = steel_properties['density_cond'](T.harmonicFaceValue) # CellTypes 20 and 21 and only in the condenser region
 
 # Wick properties
-k_wick = wick_properties['thermal_conductivity'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-k_wick_face = wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-c_p_wick = wick_properties['specific_heat'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-c_p_wick_face = wick_properties['specific_heat'](T.faceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-rho_wick = wick_properties['density'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
-rho_wick_face = wick_properties['density'](T.faceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+k_wick_cell = wick_properties['thermal_conductivity'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+k_wick_face = wick_properties['thermal_conductivity'](T.harmonicFaceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+c_p_wick_cell = wick_properties['specific_heat'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+c_p_wick_face = wick_properties['specific_heat'](T.harmonicFaceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+rho_wick_cell = wick_properties['density'](T, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
+rho_wick_face = wick_properties['density'](T.harmonicFaceValue, sodium_properties, steel_properties, parameters) # CellTypes 10 and 11
 
 # Vapor core properties
-k_vc_evap_cond = vc_properties['thermal_conductivity'](T, end_cap_mask, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) # CellType 0
-k_vc_evap_cond_face = vc_properties['thermal_conductivity'](T.faceValue, end_cap_mask, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) # CellType 0
-k_vc_adiabatic = vc_properties['thermal_conductivity'](T, end_cap_mask, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) # CellType 1
-k_vc_adiabatic_face = vc_properties['thermal_conductivity'](T.faceValue, end_cap_mask, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) # CellType 1
-c_p_vc = vc_properties['specific_heat'](T) # CellTypes 0 and 1
-c_p_vc_face = vc_properties['specific_heat'](T.faceValue) # CellTypes 0 and 1
-rho_vc = vc_properties['density'](T) # CellTypes 0 and 1
-rho_vc_face = vc_properties['density'](T.faceValue) # CellTypes 0 and 1
+k_vc_evap_cond_cell = vc_properties['thermal_conductivity'](T, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) # CellType 0
+k_vc_evap_cond_face = vc_properties['thermal_conductivity'](T.harmonicFaceValue, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) # CellType 0
+k_vc_adiabatic_cell = vc_properties['thermal_conductivity'](T, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) # CellType 1
+k_vc_adiabatic_face = vc_properties['thermal_conductivity'](T.harmonicFaceValue, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) # CellType 1
+c_p_vc_cell = vc_properties['specific_heat'](T) # CellTypes 0 and 1
+c_p_vc_face = vc_properties['specific_heat'](T.harmonicFaceValue) # CellTypes 0 and 1
+rho_vc_cell = vc_properties['density'](T) # CellTypes 0 and 1
+rho_vc_face = vc_properties['density'](T.harmonicFaceValue) # CellTypes 0 and 1
 
 # ----------------------------------------
 # Define the spatially varying D coefficient 
@@ -114,11 +120,11 @@ D_expr = 0 * T
 epsilon = 1e-12
 
 # Add symbolic contributions by region
-D_expr = D_expr + ((cell_types == 0) * (k_vc_evap_cond / (rho_vc * c_p_vc + epsilon)))
-D_expr = D_expr + ((cell_types == 1) * (k_vc_adiabatic / (rho_vc * c_p_vc + epsilon)))
-D_expr = D_expr + ((wick_cells) * (k_wick / (rho_wick * c_p_wick + epsilon)))
-D_expr = D_expr + ((wall_cond_cells) * (k_wall / (rho_wall_cond * c_p_wall + epsilon)))
-D_expr = D_expr + ((wall_evap_adia_cells) * (k_wall / (rho_wall_evap_adia * c_p_wall + epsilon)))
+D_expr = D_expr + ((cell_types == 0) * (k_vc_evap_cond_cell / (rho_vc_cell * c_p_vc_cell + epsilon)))
+D_expr = D_expr + ((cell_types == 1) * (k_vc_adiabatic_cell / (rho_vc_cell * c_p_vc_cell + epsilon)))
+D_expr = D_expr + ((wick_cells) * (k_wick_cell / (rho_wick_cell * c_p_wick_cell + epsilon)))
+D_expr = D_expr + ((wall_cond_cells) * (k_wall_cell / (rho_wall_cond_cell * c_p_wall_cell + epsilon)))
+D_expr = D_expr + ((wall_evap_adia_cells) * (k_wall_cell / (rho_wall_evap_adia_cell * c_p_wall_cell + epsilon)))
 
 D_var = CellVariable(name="Diffusivity", mesh=mesh, value=D_expr, hasOld=True)
 
@@ -126,23 +132,23 @@ D_var = CellVariable(name="Diffusivity", mesh=mesh, value=D_expr, hasOld=True)
 # Define CellVariables for k, rho, c_p for plotting
 # ----------------------------------------
 k_expr = 0 * T
-k_expr = k_expr + (vc_evap_cond_cells * k_vc_evap_cond)
-k_expr = k_expr + (vc_adiabatic_cells * k_vc_adiabatic)
-k_expr = k_expr + (wick_cells * k_wick)
-k_expr = k_expr + (wall_cells * k_wall) # k_wall is the same for wall_cond and wall_evap_adia
+k_expr = k_expr + (vc_evap_cond_cells * k_vc_evap_cond_cell)
+k_expr = k_expr + (vc_adiabatic_cells * k_vc_adiabatic_cell)
+k_expr = k_expr + (wick_cells * k_wick_cell)
+k_expr = k_expr + (wall_cells * k_wall_cell) # k_wall is the same for wall_cond and wall_evap_adia
 k_var = CellVariable(name="ThermalConductivity", mesh=mesh, value=k_expr, hasOld=True)
 
 rho_expr = 0 * T
-rho_expr = rho_expr + ((vc_evap_cond_cells | vc_adiabatic_cells) * rho_vc) # rho_vc is same for both
-rho_expr = rho_expr + (wick_cells * rho_wick)
-rho_expr = rho_expr + (wall_cond_cells * rho_wall_cond)
-rho_expr = rho_expr + (wall_evap_adia_cells * rho_wall_evap_adia)
+rho_expr = rho_expr + ((vc_evap_cond_cells | vc_adiabatic_cells) * rho_vc_cell) # rho_vc is same for both
+rho_expr = rho_expr + (wick_cells * rho_wick_cell)
+rho_expr = rho_expr + (wall_cond_cells * rho_wall_cond_cell)
+rho_expr = rho_expr + (wall_evap_adia_cells * rho_wall_evap_adia_cell)
 rho_var = CellVariable(name="Density", mesh=mesh, value=rho_expr, hasOld=True)
 
 cp_expr = 0 * T
-cp_expr = cp_expr + ((vc_evap_cond_cells | vc_adiabatic_cells) * c_p_vc) # c_p_vc is same for both
-cp_expr = cp_expr + (wick_cells * c_p_wick)
-cp_expr = cp_expr + (wall_cells * c_p_wall) # c_p_wall is same for both
+cp_expr = cp_expr + ((vc_evap_cond_cells | vc_adiabatic_cells) * c_p_vc_cell) # c_p_vc is same for both
+cp_expr = cp_expr + (wick_cells * c_p_wick_cell)
+cp_expr = cp_expr + (wall_cells * c_p_wall_cell) # c_p_wall is same for both
 cp_var = CellVariable(name="SpecificHeat", mesh=mesh, value=cp_expr, hasOld=True)
 
 D_expr = D_expr + (k_expr / (rho_expr * cp_expr + epsilon))
@@ -243,10 +249,16 @@ vc_adiabatic_faces = vc_faces & ((x_face > (dimensions['L_e'])) & (x_face < dime
 # preview_face_mask(mesh, vc_evap_cond_faces, title="Vapor Core Evaporator and Condenser Faces")
 # preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
 
-cp = FaceVariable(mesh=mesh, value=1.)
-rho = FaceVariable(mesh=mesh, value=1.)
-k = FaceVariable(mesh=mesh, value=1.)
-D = FaceVariable(mesh=mesh, value=1.)
+cp = CellVariable(mesh=mesh, value=1.) # TransientTerm expects a CellVariable
+rho = CellVariable(mesh=mesh, value=1.) # TransientTerm expects a CellVariable
+k = FaceVariable(mesh=mesh, value=1.) # DiffusionTerm expects a FaceVariable
+
+# D = FaceVariable(mesh=mesh, value=1.) # DiffusionTerm expects a FaceVariable
+
+# D = 1.0
+# cp = 1000.0
+# rho = 1000.0
+# k = 1e-6
 
 # D.setValue((k_wall_face / (rho_wall_cond_face * c_p_wall_face)), where=wall_cond_faces)
 # D.setValue((k_wall_face / (rho_wall_evap_adia_face * c_p_wall_face)), where=wall_evap_adia_faces)
@@ -254,19 +266,39 @@ D = FaceVariable(mesh=mesh, value=1.)
 # D.setValue((k_vc_evap_cond_face / (rho_vc_face * c_p_vc_face)), where=vc_evap_cond_faces)
 # D.setValue((k_vc_adiabatic_face / (rho_vc_face * c_p_vc_face)), where=vc_adiabatic_faces)
 
+# D = D + ((k_wall_face / (rho_wall_cond_face * c_p_wall_face)) * wall_cond_faces)
+# D = D + ((k_wall_face / (rho_wall_evap_adia_face * c_p_wall_face)) * wall_evap_adia_faces)
+# D = D + ((k_wick_face / (rho_wick_face * c_p_wick_face)) * wick_faces)
+# D = D + ((k_vc_evap_cond_face / (rho_vc_face * c_p_vc_face)) * vc_evap_cond_faces)
+# D = D + ((k_vc_adiabatic_face / (rho_vc_face * c_p_vc_face)) * vc_adiabatic_faces)
+
 # cp.setValue(c_p_wall_face, where=wall_faces)
 # cp.setValue(c_p_wick_face, where=wick_faces)
 # cp.setValue(c_p_vc_face, where=vc_faces)
+
+cp = cp + (c_p_wall_cell * wall_cells)
+cp = cp + (c_p_wick_cell * wick_cells)
+cp = cp + (c_p_vc_cell * vc_cells)
 
 # rho.setValue(rho_wall_evap_adia_face, where=wall_evap_adia_faces)
 # rho.setValue(rho_wall_cond_face, where=wall_cond_faces)
 # rho.setValue(rho_wick_face, where=wick_faces)
 # rho.setValue(rho_vc_face, where=vc_faces)
 
+rho = rho + (rho_wall_evap_adia_cell * wall_evap_adia_cells)
+rho = rho + (rho_wall_cond_cell * wall_cond_cells)
+rho = rho + (rho_wick_cell * wick_cells)
+rho = rho + (rho_vc_cell * vc_cells)
+
 # k.setValue(k_wall_face, where=wall_faces)
 # k.setValue(k_wick_face, where=wick_faces)
 # k.setValue(k_vc_evap_cond_face, where=vc_evap_cond_faces)
 # k.setValue(k_vc_adiabatic_face, where=vc_adiabatic_faces)
+
+k = k + (k_wall_face * wall_faces)
+k = k + (k_wick_face * wick_faces)
+k = k + (k_vc_evap_cond_face * vc_evap_cond_faces)
+k = k + (k_vc_adiabatic_face * vc_adiabatic_faces)
 
 # D = k / (rho * cp + eps)
 
@@ -303,7 +335,7 @@ T.setValue(all_params["T_amb"])
 # ----------------------------------------
 
 # eq = TransientTerm(var=T) == DiffusionTerm(coeff=D, var=T)
-eq = TransientTerm(var=T, coeff=rho_expr*cp_expr) == DiffusionTerm(coeff=k_expr, var=T)
+eq = TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=k, var=T)
 
 # ----------------------------------------
 # Dirichlet at condenser
@@ -316,7 +348,7 @@ eq = TransientTerm(var=T, coeff=rho_expr*cp_expr) == DiffusionTerm(coeff=k_expr,
 # ----------------------------------------
 
 # Variable to plot alongside Temperature. Options: "D_var", "k_plot_var", "rho_plot_var", "cp_plot_var"
-plot_selection = "cp_var" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
+plot_selection = "T" # CHANGE THIS STRING TO VISUALIZE OTHER VARIABLES
 
 plottable_vars_map = {
     "D_var": D_var,
@@ -354,8 +386,21 @@ timestep = 0
 run_time = all_params['t_end']
 t = timestep * dt
 
-from fipy.solvers import LinearLUSolver
-solver = LinearLUSolver(tolerance=1e-8, iterations=1000)
+from fipy.solvers import LinearGMRESSolver # Changed from LinearLUSolver
+# from fipy.solvers import LinearLUSolver # Original solver, commented out
+# from fipy.solvers import LinearBICGSolver # Another alternative iterative solver
+# from fipy.preconditioners import PointJacobiPreconditioner # Example if a preconditioner is needed
+
+# solver = LinearLUSolver(tolerance=1e-6, iterations=1000) # Original solver
+solver = LinearGMRESSolver(tolerance=1e-6, iterations=1000) # Using GMRES
+# Or, try LinearBICGSolver:
+# solver = LinearBICGSolver(tolerance=1e-6, iterations=1000)
+
+# If using an iterative solver like GMRES or BICGSOLVER, a preconditioner can significantly help:
+# For example, to use PointJacobiPreconditioner with GMRES:
+
+# precon = jacobiPreconditioner()
+# solver = LinearGMRESSolver(tolerance=1e-6, iterations=1000, precon=precon)
 
 T.setValue(all_params["T_amb"])  # Set initial temperature
 
@@ -368,13 +413,15 @@ while t < run_time:
     if timestep in measure_times:
         profiles.append(T.value[top_wall_mask].copy())
         profile_times.append(timestep * dt)
-    while res > 1e-4:
+    while res > 2.0:
         # print(f"Current T min: {T.min()}, T max: {T.max()}")        
         res = eq.sweep(dt=dt, solver=solver)
+        print(f"Residual: {res}")
     # if timestep % 20 == 0:
     #     if __name__ == "__main__":
     #         viewer.plot()
-    # print(f"Time: {t:.2f} / {run_time:.2f} s")
+    print(f"-----------------------------STEP----------------------------------\n\
+          Time: {t:.2f} / {run_time:.2f} s")
 
 print(f"Final time: {t:.2f} / {run_time:.2f} s")
 

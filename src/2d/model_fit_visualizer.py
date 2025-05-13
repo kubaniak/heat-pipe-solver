@@ -156,7 +156,7 @@ def main():
     # This is just example data - replace with your actual data
     c_p_data = np.array([
         490, 
-        830,
+        840,
         1310,
         1710,
         1930,

@@ -26,11 +26,11 @@ def c_p_sodium_l(T): return 1436.72 - 0.58 * (T - 273.15) + 4.672e-4 * (T - 273.
 
 def c_p_sodium_v(T):
     return (16105.174483770606 - 111.33277032117233 * T + 0.2994911138258808 * T**2 - 0.00037555960577985903 * T**3
-            + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 2.8698379132831126e-15 * T**6)
+            + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 9.892389871569863e-15 * T**6)
 
 def c_v_sodium_v(T):
     return (2944.6696506593726 - 27.379453000849395 * T + 0.08934864074702555 * T**2 - 0.00011764446335597157 * T**3\
-             + 7.521494832758196e-08 * T**4 - 2.338468836342328e-11 * T**5 + 9.892389871569863e-15 * T**6)
+             + 7.521494832758196e-08 * T**4 - 2.338468836342328e-11 * T**5 + 2.8403280414122426e-15 * T**6)
 
 def mu_sodium_v(T): return 6.083e-9 * T + 1.2606e-5
 def P_sat_sodium(T): return npx.exp(11.9463 - 12633.73 / T - 0.4672 * npx.log(T)) * 1e6
@@ -110,15 +110,15 @@ def get_Q_sonic(T, end_cap_mask, mesh, sodium_props, dims, consts):
 
     return Q
 
-def k_eff_vc(T, end_cap_mask, mesh, region, sodium_props, dims, params, consts):
-    R_v = dims['R_vc']
-    mu = sodium_props['viscosity'](T)
-    P = sodium_props['vapor_pressure'](T)
-    R = consts['R']
-    M = params['M_g_sodium']
-    h_l = sodium_props['enthalpy_liquid'](T)
-    h_v = sodium_props['enthalpy_vapor'](T)
-    h_vap = sodium_props['heat_of_vaporization'](T)
+def k_eff_vc(T, mesh, region, sodium_props, dims, params, consts):
+    R_v = dims['R_vc'] # float
+    mu = sodium_props['viscosity'](T) # binOp CellVariable
+    P = sodium_props['vapor_pressure'](T) # binOp CellVariable
+    R = consts['R'] # float
+    M = params['M_g_sodium'] # float
+    h_l = sodium_props['enthalpy_liquid'](T) # binOp CellVariable
+    h_v = sodium_props['enthalpy_vapor'](T) # binOp CellVariable
+    h_vap = sodium_props['heat_of_vaporization'](T) # binOp CellVariable
     factor = (2 * R_v / 3) * npx.sqrt((8 * R * T) / (npx.pi * M))
     base = (R_v**2 * P) / (4 if region == 'evap_cond' else 8) / mu + factor
     enthalpy = h_l if region == 'evap_cond' else h_v
