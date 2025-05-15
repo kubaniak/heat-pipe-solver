@@ -161,6 +161,8 @@ def k_eff_wick(T, Na_props, steel_props, params):
     numerator = (k_Na_i + k_steel) - (1 - epsilon) * (k_Na_i - k_steel)
     denominator = (k_Na_i + k_steel) + (1 - epsilon) * (k_Na_i - k_steel)
 
+    eps = 1e-12
+
     return k_Na_i * numerator / denominator
 
 def c_p_eff_wick(T, Na_props, steel_props, params):
