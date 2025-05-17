@@ -8,6 +8,7 @@ from mesh import generate_composite_mesh
 from mesh import generate_mesh_2d
 from matplotlib import pyplot as plt
 import time 
+from fipy import parallelComm
 
 all_params = get_all_params()
 mesh_params = get_param_group('mesh')
@@ -143,12 +144,12 @@ eq = (TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=Gamma, var=T) + 
 T.setValue(T_amb)  # Set initial temperature
 
 dt = 0.02
-t_end = 30.0 # Changed t_end to 30.0
+t_end = 1800.0 # seconds
 
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
 
-measure_times = [1, 30, 60, 120, 300, 400, 500, 550] # seconds
+measure_times = [1, 30, 60, 120, 300, 400, 500, 600, 1000, 1400, 1500, 1600, 1700] # seconds
 
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
@@ -168,16 +169,16 @@ next_measure_time_idx = 0
 
 # Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
 start_time = time.time() # Record start time
+print(f"Simulating for {t_end} seconds...")
 for t in npx.arange(0, t_end, dt):
     # print(f"rho_x: {cp_x}")
     # print(f"cp_x: {k_Tx}")
     # print(f"k_x: {rho_x}")
     # eq.solve(var=T, dt=dt)
     residual = eq.sweep(var=T, dt=dt)
-    print(f"Time {t:.2f}, Residual: {residual}")
-
     # Capture profile if current time t is at or just past a scheduled measure_time
     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
+        print(f"Time {t:.2f}, Residual: {residual}")
         profiles.append(T.value[top_wall_mask].copy())
         actual_profile_times.append(t)
         next_measure_time_idx += 1
@@ -201,6 +202,7 @@ end_time = time.time() # Record end time
 elapsed_time = end_time - start_time
 print(f"Simulated time: {t_end} seconds")
 print(f"Actual execution time: {elapsed_time:.2f} seconds")
+print("%d cells on processor %d of %d" % (mesh.numberOfCells, parallelComm.procID, parallelComm.Nproc))
 
 # Get x-coordinates for top wall cells
 x_top_wall = x_cell[top_wall_mask]
