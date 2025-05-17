@@ -68,7 +68,7 @@ def rho_eff_steel(T): return rho_steel(T) + 3.75e6 / c_p_steel(T)
 def get_steel_properties():
     return {
         'density_evap_adia': rho_eff_steel,
-        'density_cond': rho_steel,
+        'density': rho_steel,
         'thermal_conductivity': k_steel,
         'specific_heat': c_p_steel,
     }
@@ -177,7 +177,7 @@ def rho_eff_wick(T, Na_props, steel_props, params):
     rho_s = Na_props['density_solid'](T)
     rho_Na_i = get_rho_Na_i(T, params, rho_l, rho_s)
     epsilon = params['porosity_wick']
-    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density_cond'](T)
+    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density'](T)
 
 def get_wick_properties():
     return {
