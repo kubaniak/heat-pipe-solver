@@ -6,8 +6,8 @@ from params import get_all_params, get_param_group
 from material_properties import get_wick_properties, get_vc_properties, get_steel_properties, get_sodium_properties
 from mesh import generate_composite_mesh
 from mesh import generate_mesh_2d
-from tqdm import tqdm
 from matplotlib import pyplot as plt
+import time 
 
 all_params = get_all_params()
 mesh_params = get_param_group('mesh')
@@ -143,7 +143,7 @@ eq = (TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=Gamma, var=T) + 
 T.setValue(T_amb)  # Set initial temperature
 
 dt = 0.02
-t_end = 600.0
+t_end = 30.0 # Changed t_end to 30.0
 
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
@@ -167,6 +167,7 @@ actual_profile_times = []
 next_measure_time_idx = 0
 
 # Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
+start_time = time.time() # Record start time
 for t in npx.arange(0, t_end, dt):
     # print(f"rho_x: {cp_x}")
     # print(f"cp_x: {k_Tx}")
@@ -195,6 +196,11 @@ for t in npx.arange(0, t_end, dt):
 #         print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
 #     if __name__ == "__main__":
 #         viewer.plot()"""
+
+end_time = time.time() # Record end time
+elapsed_time = end_time - start_time
+print(f"Simulated time: {t_end} seconds")
+print(f"Actual execution time: {elapsed_time:.2f} seconds")
 
 # Get x-coordinates for top wall cells
 x_top_wall = x_cell[top_wall_mask]
