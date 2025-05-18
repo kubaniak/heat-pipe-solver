@@ -224,7 +224,12 @@ plt.savefig("plots/top_wall_axial_profiles.png", dpi=300)
 plt.show()
 
 # save the results
-npx.savez("results/2d_results.npz", T=T.value, x=x_cell, y=y_cell, time=actual_profile_times, profiles=profiles)
+import os
+results_dir = "results"
+os.makedirs(results_dir, exist_ok=True)
 
-from fipy import input
+npx.save(os.path.join(results_dir, "x_top_wall_sorted.npy"), x_top_wall_sorted)
+npx.save(os.path.join(results_dir, "profiles.npy"), npx.array(profiles))
+npx.save(os.path.join(results_dir, "actual_profile_times.npy"), npx.array(actual_profile_times))
+
 input("Press Enter to continue...")
