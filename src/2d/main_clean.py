@@ -119,7 +119,7 @@ faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x
 faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
 
 # Constant influx
-q = parameters['Q_input_flux']
+q = parameters['Q_input_flux'] * 3
 
 # Convective boundary condition
 Gamma = FaceVariable(mesh=mesh, value=k)
@@ -144,12 +144,12 @@ eq = (TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=Gamma, var=T) + 
 T.setValue(T_amb)  # Set initial temperature
 
 dt = 0.02
-t_end = 1800.0 # seconds
+t_end = 10.0 # seconds
 
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
 
-measure_times = [1, 30, 60, 120, 300, 400, 500, 600, 1000, 1400, 1500, 1600, 1700] # seconds
+measure_times = [1, 2, 3, 4, 5, 6, 7, 8, 9] # seconds
 
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
@@ -222,6 +222,9 @@ plt.grid(True)
 plt.tight_layout()
 plt.savefig("plots/top_wall_axial_profiles.png", dpi=300)
 plt.show()
+
+# save the results
+npx.savez("results/2d_results.npz", T=T.value, x=x_cell, y=y_cell, time=actual_profile_times, profiles=profiles)
 
 from fipy import input
 input("Press Enter to continue...")
