@@ -8,7 +8,7 @@ are provided in separate modules.
 from fipy import CellVariable, TransientTerm, DiffusionTerm, Viewer, FaceVariable, ImplicitSourceTerm, Variable, ExplicitDiffusionTerm, GeneralSolver
 from fipy.tools import numerix as npx
 from fipy.meshes import CylindricalGrid2D, Grid1D
-from tqdm import tqdm
+# from tqdm import tqdm
 from mesh import generate_mesh_2d, generate_composite_mesh
 from params import get_all_params, get_param_group
 from utils import preview_mesh, preview_face_mask, save_animation, init_tripcolor_viewer, preview_cell_mask
@@ -662,23 +662,23 @@ solver = LinearGMRESSolver(tolerance=1e-6, iterations=1000) # Using GMRES
 # input("Press <return> to proceed...")
     
 
-# while t < t_end:
-#     t += dt
-#     timestep += 1
-#     T.updateOld()
-#     # D_var.setValue(D_expr) # Explicitly update D_var after T changes
-#     res = 1e+10
-#     if timestep in measure_times:
-#         profiles.append(T.value[top_wall_mask].copy())
-#         profile_times.append(timestep * dt)
-#     while res > 1e-4:
-#         # print(f"Current T min: {T.min()}, T max: {T.max()}")
-#         res = eq.sweep(var=T, dt=dt, solver=solver)
-#         # print(f"Sweep Time: {t:.2f} / {t_end:.2f} s --- Residual: {res}")
-#     # if timestep % 10 == 0:
-#     #     if __name__ == "__main__":
-#     #         viewer.plot()
-#     print(f"STEP! Time: {t:.2f} / {t_end:.2f} s")
+while t < t_end:
+    t += dt
+    timestep += 1
+    T.updateOld()
+    # D_var.setValue(D_expr) # Explicitly update D_var after T changes
+    res = 1e+10
+    # if timestep in measure_times:
+    #     profiles.append(T.value[top_wall_mask].copy())
+    #     profile_times.append(timestep * dt)
+    while res > 1e-4:
+        # print(f"Current T min: {T.min()}, T max: {T.max()}")
+        res = eq.sweep(var=T, dt=dt, solver=solver)
+        # print(f"Sweep Time: {t:.2f} / {t_end:.2f} s --- Residual: {res}")
+    # if timestep % 10 == 0:
+    #     if __name__ == "__main__":
+    #         viewer.plot()
+    print(f"STEP! Time: {t:.2f} / {t_end:.2f} s")
 
 # Get x-coordinates for top wall cells
 # x_top_wall = x_cell[top_wall_mask]

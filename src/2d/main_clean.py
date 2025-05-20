@@ -29,7 +29,7 @@ mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
 x_face, y_face = mesh.faceCenters
 x_cell, y_cell = mesh.cellCenters
 
-T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=False)
+T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=True)
 
 
 # preview_face_mask(mesh, faces_evaporator, title="Evaporator Faces")
@@ -45,7 +45,7 @@ T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOl
 T_amb = parameters['T_amb'] # Used as reference temperature (e.g., 290K)
 h = 750.0
 
-"""# Simple temperature-dependent properties
+# Simple temperature-dependent properties
 # cp_T = cp_0 * (1 + 0.005 * (T - T_amb)) # cp is defined at cell centers, so we can use T directly
 # k_T = k_0 * (1 + 0.005 * (T.faceValue - T_amb)) # T.faceValue is used because k is the diffusion coefficient, defined between faces
 # rho_T = rho_0 * (1 + 0.005 * (T - T_amb)) # rho is defined at cell centers, so we can use T directly
@@ -59,7 +59,6 @@ h = 750.0
 # cp_Tx = cp_0 * (1 + 0.005 * (T - T_amb)) * 1e-3 * (x_cell >= dimensions['L_input_right'] - 0.02) + cp_0 * (1 + 0.005 * (T - T_amb)) * 1e3 * (x_cell < dimensions['L_input_right'] - 0.02)
 # k_Tx = k_0 * (1 + 0.005 * (T.faceValue - T_amb)) * 1e1 * (x_face >= dimensions['L_input_right'] - 0.02) + k_0 * (1 + 0.005 * (T.faceValue - T_amb)) * 1e-1 * (x_face < dimensions['L_input_right'] - 0.02)
 # rho_Tx = rho_0 * (1 + 0.005 * (T - T_amb)) * 1e-3 * (x_cell >= dimensions['L_input_right'] - 0.02) + rho_0 * (1 + 0.005 * (T - T_amb)) * 1e3 * (x_cell < dimensions['L_input_right'] - 0.02)
-"""
 
 # Property masks
 vc_evap_cond_cells = (cell_types == 0)
@@ -103,6 +102,8 @@ k = vc_properties['thermal_conductivity'](T.faceValue, mesh, 'evap_cond', sodium
     + wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) * (wick_faces) \
     + steel_properties['thermal_conductivity'](T.faceValue) * (wall_faces)
 
+k_viewer = CellVariable(mesh=mesh, value=k)
+
 cp = vc_properties['specific_heat'](T) * (vc_evap_cond_cells) \
     + vc_properties['specific_heat'](T) * (vc_adiabatic_cells) \
     + wick_properties['specific_heat'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
@@ -111,7 +112,7 @@ cp = vc_properties['specific_heat'](T) * (vc_evap_cond_cells) \
 rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + vc_properties['density'](T) * (vc_adiabatic_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
-    + steel_properties['density'](T) * (wall_cells)
+    + steel_properties['density_evap_adia'](T) * (wall_cells)
 
 
 # Define boundary condition masks
@@ -119,7 +120,7 @@ faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x
 faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
 
 # Constant influx
-q = parameters['Q_input_flux'] * 3
+q = parameters['Q_input_flux']
 
 # Convective boundary condition
 Gamma = FaceVariable(mesh=mesh, value=k)
@@ -144,12 +145,15 @@ eq = (TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=Gamma, var=T) + 
 T.setValue(T_amb)  # Set initial temperature
 
 dt = 0.02
-t_end = 10.0 # seconds
+t_end = 3000.0 # seconds
 
+# Try plotting k
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
 
-measure_times = [1, 2, 3, 4, 5, 6, 7, 8, 9] # seconds
+measure_times = [1, 5, 10, 20, 50]
+measure_times.extend(range(100, 3001, 100)) # seconds
+print(f"Measuring at: {measure_times} seconds")
 
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
@@ -170,33 +174,40 @@ next_measure_time_idx = 0
 # Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
 start_time = time.time() # Record start time
 print(f"Simulating for {t_end} seconds...")
-for t in npx.arange(0, t_end, dt):
-    # print(f"rho_x: {cp_x}")
-    # print(f"cp_x: {k_Tx}")
-    # print(f"k_x: {rho_x}")
-    # eq.solve(var=T, dt=dt)
-    residual = eq.sweep(var=T, dt=dt)
-    # Capture profile if current time t is at or just past a scheduled measure_time
-    if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
-        print(f"Time {t:.2f}, Residual: {residual}")
-        profiles.append(T.value[top_wall_mask].copy())
-        actual_profile_times.append(t)
-        next_measure_time_idx += 1
-        
-    # if t % 5 == 0:
-    #     if __name__ == "__main__":
-    #         viewer.plot()
+# for t in npx.arange(0, t_end, dt):
+#     # print(f"rho_x: {cp_x}")
+#     # print(f"cp_x: {k_Tx}")
+#     # print(f"k: {k}")
+#     # eq.solve(var=T, dt=dt)
+#     residual = eq.sweep(var=T, dt=dt)
+#     # Capture profile if current time t is at or just past a scheduled measure_time
+#     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
+#         print(f"Time {t:.2f}, Residual: {residual}")
+#         profiles.append(T.value[top_wall_mask].copy())
+#         actual_profile_times.append(t)
+#         next_measure_time_idx += 1
 
-"""# Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
-# sweeps = 5
-# timestep = 0
-# for t in range(int(t_end/dt)):
-#     T.updateOld()
-#     for sweep in range(sweeps):
-#         res = eq.sweep(var=T, dt=dt)
-#         print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
-#     if __name__ == "__main__":
-#         viewer.plot()"""
+#     # if t % 5 == 0:
+#     #     if __name__ == "__main__":
+#     #         viewer.plot()
+
+# TRY with guyer implementation in equation
+# Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
+sweeps = 5
+timestep = 0
+for t in range(int(t_end/dt)):
+    T.updateOld()
+    # UPDATE k HERE!
+    for sweep in range(sweeps):
+        res = eq.sweep(var=T, dt=dt)
+        print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
+    # if __name__ == "__main__":
+    #     viewer.plot()
+    if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
+        print(f"Time {t*dt:.2f}")
+        profiles.append(T.value[top_wall_mask].copy())
+        actual_profile_times.append(t*dt)
+        next_measure_time_idx += 1
 
 end_time = time.time() # Record end time
 elapsed_time = end_time - start_time
@@ -232,4 +243,17 @@ npx.save(os.path.join(results_dir, "x_top_wall_sorted.npy"), x_top_wall_sorted)
 npx.save(os.path.join(results_dir, "profiles.npy"), npx.array(profiles))
 npx.save(os.path.join(results_dir, "actual_profile_times.npy"), npx.array(actual_profile_times))
 
+serial_time = 23.47
+
+parallel_times = [16.94, 18.69, 18.31, 18.50, 21.18, 22.23, 24.66, 30.41]
+# n_cpus = [1, 2, 3, 4, 5, 6, 7, 8]
+
+# plt.figure(figsize=(10, 6))
+# plt.plot(n_cpus, parallel_times, marker='o', label='Parallel')
+# plt.axhline(y=serial_time, color='r', linestyle='--', label='Serial')
+# plt.xlabel("Number of CPUs")
+# plt.ylabel("Execution Time [s]")
+# plt.title("Execution Time vs Number of CPUs")
+# plt.legend()
+# plt.grid(True)
 input("Press Enter to continue...")
