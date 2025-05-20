@@ -29,12 +29,12 @@ mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
 x_face, y_face = mesh.faceCenters
 x_cell, y_cell = mesh.cellCenters
 
-T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=True)
+T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=False)
 
+T_amb = parameters['T_amb'] # Used as reference temperature (e.g., 290K)
+h = 750.0
 
-# preview_face_mask(mesh, faces_evaporator, title="Evaporator Faces")
-# preview_face_mask(mesh, faces_condenser, title="Condenser Faces")
-
+# region simple properties
 # constants
 # rho_0 = 7200.0
 # rho_0 = CellVariable(mesh=mesh, value=rho_0) # For spatial dependence, we have to define this explicitly
@@ -42,9 +42,6 @@ T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOl
 # cp_0 = CellVariable(mesh=mesh, value=cp_0) # For spatial dependence, we have to define this explicitly
 # k_0 = 55.0
 # k_0 = FaceVariable(mesh=mesh, value=k_0) # For spatial dependence, we have to define this explicitly
-T_amb = parameters['T_amb'] # Used as reference temperature (e.g., 290K)
-h = 750.0
-
 # Simple temperature-dependent properties
 # cp_T = cp_0 * (1 + 0.005 * (T - T_amb)) # cp is defined at cell centers, so we can use T directly
 # k_T = k_0 * (1 + 0.005 * (T.faceValue - T_amb)) # T.faceValue is used because k is the diffusion coefficient, defined between faces
@@ -59,8 +56,9 @@ h = 750.0
 # cp_Tx = cp_0 * (1 + 0.005 * (T - T_amb)) * 1e-3 * (x_cell >= dimensions['L_input_right'] - 0.02) + cp_0 * (1 + 0.005 * (T - T_amb)) * 1e3 * (x_cell < dimensions['L_input_right'] - 0.02)
 # k_Tx = k_0 * (1 + 0.005 * (T.faceValue - T_amb)) * 1e1 * (x_face >= dimensions['L_input_right'] - 0.02) + k_0 * (1 + 0.005 * (T.faceValue - T_amb)) * 1e-1 * (x_face < dimensions['L_input_right'] - 0.02)
 # rho_Tx = rho_0 * (1 + 0.005 * (T - T_amb)) * 1e-3 * (x_cell >= dimensions['L_input_right'] - 0.02) + rho_0 * (1 + 0.005 * (T - T_amb)) * 1e3 * (x_cell < dimensions['L_input_right'] - 0.02)
+# endregion
 
-# Property masks
+# region property masks
 vc_evap_cond_cells = (cell_types == 0)
 vc_adiabatic_cells = (cell_types == 1)
 vc_cells = vc_evap_cond_cells | vc_adiabatic_cells
@@ -92,17 +90,16 @@ wall_cond_faces = wall_faces & (x_face > (dimensions['L_e'] + dimensions['L_a'])
 # preview_face_mask(mesh, wick_faces, title="Wick Faces")
 # preview_face_mask(mesh, vc_faces, title="Vapor Core Faces")
 # preview_face_mask(mesh, vc_evap_cond_faces, title="Vapor Core Evaporator and Condenser Faces")
-# preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
+preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
 
 # preview_face_mask(mesh, vc_evap_cond_faces | vc_adiabatic_faces | wick_faces | wall_faces, title="All Faces")
+# endregion
 
 # Real temperature-dependent properties
 k = vc_properties['thermal_conductivity'](T.faceValue, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) * (vc_evap_cond_faces) \
     + vc_properties['thermal_conductivity'](T.faceValue, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) * (vc_adiabatic_faces) \
     + wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) * (wick_faces) \
     + steel_properties['thermal_conductivity'](T.faceValue) * (wall_faces)
-
-k_viewer = FaceVariable(mesh=mesh, value=k)
 
 cp = vc_properties['specific_heat'](T) * (vc_evap_cond_cells) \
     + vc_properties['specific_heat'](T) * (vc_adiabatic_cells) \
@@ -114,7 +111,7 @@ rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
     + steel_properties['density_evap_adia'](T) * (wall_cells)
 
-
+t_end = 15.0
 dt = 0.02
 
 # Define boundary condition masks
@@ -146,15 +143,14 @@ eq = (ImplicitSourceTerm(coeff=cp * rho / dt, var=T) - rho * cp * T.old / dt == 
 
 T.setValue(T_amb)  # Set initial temperature
 
-t_end = 600.0 # seconds
+# viewer = Viewer(vars=T, title="Temperature Distribution")
+# viewer.plot()
 
-viewer = Viewer(vars=T, title="Temperature Distribution")
-viewer.plot()
-
-measure_times = [1, 5, 10, 20, 50]
+measure_times = [1, 5, 10, 15, 20, 50]
 measure_times.extend(range(100, 3001, 100)) # seconds
 print(f"Measuring at: {measure_times} seconds")
 
+# region plotting
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
 facesTop = npx.array(mesh.facesTop)        # shape: (nFaces,)
@@ -171,44 +167,165 @@ profiles = []
 actual_profile_times = []
 next_measure_time_idx = 0
 
-# Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
+# Initialize lists for storing density profiles
+rho_top_wall_profiles = []
+rho_wick_profiles = []
+rho_vc_profiles = []
+
+# Initialize lists for storing specific heat profiles
+cp_top_wall_profiles = []
+cp_wick_profiles = []
+cp_vc_profiles = []
+
+# Initialize lists for storing thermal conductivity profiles
+k_top_wall_profiles = []
+k_wick_profiles = []
+k_vc_profiles = []
+# endregion
+
 start_time = time.time() # Record start time
 print(f"Simulating for {t_end} seconds...")
-# for t in npx.arange(0, t_end, dt):
-#     # print(f"rho_x: {cp_x}")
-#     # print(f"cp_x: {k_Tx}")
-#     # print(f"k: {k}")
-#     # eq.solve(var=T, dt=dt)
-#     residual = eq.sweep(var=T, dt=dt)
-#     # Capture profile if current time t is at or just past a scheduled measure_time
-#     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
-#         print(f"Time {t:.2f}, Residual: {residual}")
-#         profiles.append(T.value[top_wall_mask].copy())
-#         actual_profile_times.append(t)
-#         next_measure_time_idx += 1
 
+# region Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
+for t in npx.arange(0, t_end, dt):
+    # eq.solve(var=T, dt=dt)
+    res = eq.sweep(var=T, dt=dt)
+    # Capture profile if current time t is at or just past a scheduled measure_time
+    # region saving profiles
+    if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
+        current_time_step = t # Use the actual time t from the loop for consistency
+        if not actual_profile_times or actual_profile_times[-1] < current_time_step: # Ensure we only add once per measure point
+            print(f"Time {current_time_step:.2f}, Residual: {res}")
+            profiles.append(T.value[top_wall_mask].copy()) # Temperature
+            actual_profile_times.append(current_time_step)
+
+            # Capture density profiles
+            current_rho_values = rho.value # Get current rho values once
+            rho_top_wall_profiles.append(current_rho_values[top_wall_mask].copy())
+            rho_vc_profiles.append(current_rho_values[vc_cells].copy())
+
+            # Handle wick cells density - average for each unique x-coordinate
+            current_rho_wick_all_cells = current_rho_values[wick_cells].copy()
+            current_x_wick_all_cells = x_cell[wick_cells]
+            
+            unique_x_wick = npx.unique(current_x_wick_all_cells) # Sorted unique x-coordinates
+            averaged_rho_wick_profile = npx.array([
+                npx.mean(current_rho_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+            ])
+            rho_wick_profiles.append(averaged_rho_wick_profile)
+
+            # Capture specific heat profiles
+            current_cp_values = cp.value # Get current cp values once
+            cp_top_wall_profiles.append(current_cp_values[top_wall_mask].copy())
+            cp_vc_profiles.append(current_cp_values[vc_cells].copy())
+
+            # Handle wick cells specific heat - average for each unique x-coordinate
+            current_cp_wick_all_cells = current_cp_values[wick_cells].copy()
+            # current_x_wick_all_cells is the same as for rho, unique_x_wick is also the same
+            averaged_cp_wick_profile = npx.array([
+                npx.mean(current_cp_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+            ])
+            cp_wick_profiles.append(averaged_cp_wick_profile)
+
+            # Capture thermal conductivity profiles (k is FaceVariable, average to cell centers first)
+            current_k_face_values = k.value
+            # cellFaceIDs was defined earlier as npx.array(mesh.cellFaceIDs)
+            # Average k values of faces surrounding each cell to get a cell-centered k
+            cell_avg_k = npx.mean(current_k_face_values[cellFaceIDs], axis=0)
+            
+            k_top_wall_profiles.append(cell_avg_k[top_wall_mask].copy())
+            k_vc_profiles.append(cell_avg_k[vc_cells].copy())
+
+            # Handle wick cells thermal conductivity - average for each unique x-coordinate
+            current_k_wick_all_cells = cell_avg_k[wick_cells].copy()
+            # current_x_wick_all_cells and unique_x_wick are already defined and can be reused from density/cp calculation
+            averaged_k_wick_profile = npx.array([
+                npx.mean(current_k_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+            ])
+            k_wick_profiles.append(averaged_k_wick_profile)
+            
+        next_measure_time_idx += 1
+        # Ensure we advance past all measure_times that are less than or equal to current t
+        while next_measure_time_idx < len(measure_times) and measure_times[next_measure_time_idx] <= t:
+            next_measure_time_idx +=1
+    # endregion
+
+    # if t % 5 == 0:
+    #     if __name__ == "__main__":
+    #         viewer.plot()
+# endregion
+
+# region Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
+# sweeps = 2
+# timestep = 0
+# for t in npx.arange(0, t_end, dt):
+#     T.updateOld()
+#     for sweep in range(sweeps):
+#         res = eq.sweep(var=T, dt=dt)
+#         # print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
 #     # if t % 5 == 0:
 #     #     if __name__ == "__main__":
 #     #         viewer.plot()
 
-# Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
-sweeps = 2
-timestep = 0
-for t in npx.arange(0, t_end, dt):
-    T.updateOld()
-    k_viewer.setValue(k)
-    for sweep in range(sweeps):
-        res = eq.sweep(var=T, dt=dt)
-        # print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
-    if t % 5 == 0:
-        if __name__ == "__main__":
-            viewer.plot()
 
-    if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
-        print(f"Time {t:.2f}, Residual: {res}")
-        profiles.append(T.value[top_wall_mask].copy())
-        actual_profile_times.append(t)
-        next_measure_time_idx += 1
+#     # region saving profiles
+#     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
+#         current_time_step = t # Use the actual time t from the loop for consistency
+#         if not actual_profile_times or actual_profile_times[-1] < current_time_step: # Ensure we only add once per measure point
+#             print(f"Time {current_time_step:.2f}, Residual: {res}")
+#             profiles.append(T.value[top_wall_mask].copy()) # Temperature
+#             actual_profile_times.append(current_time_step)
+
+#             # Capture density profiles
+#             current_rho_values = rho.value # Get current rho values once
+#             rho_top_wall_profiles.append(current_rho_values[top_wall_mask].copy())
+#             rho_vc_profiles.append(current_rho_values[vc_cells].copy())
+
+#             # Handle wick cells density - average for each unique x-coordinate
+#             current_rho_wick_all_cells = current_rho_values[wick_cells].copy()
+#             current_x_wick_all_cells = x_cell[wick_cells]
+            
+#             unique_x_wick = npx.unique(current_x_wick_all_cells) # Sorted unique x-coordinates
+#             averaged_rho_wick_profile = npx.array([
+#                 npx.mean(current_rho_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+#             ])
+#             rho_wick_profiles.append(averaged_rho_wick_profile)
+
+#             # Capture specific heat profiles
+#             current_cp_values = cp.value # Get current cp values once
+#             cp_top_wall_profiles.append(current_cp_values[top_wall_mask].copy())
+#             cp_vc_profiles.append(current_cp_values[vc_cells].copy())
+
+#             # Handle wick cells specific heat - average for each unique x-coordinate
+#             current_cp_wick_all_cells = current_cp_values[wick_cells].copy()
+#             # current_x_wick_all_cells is the same as for rho, unique_x_wick is also the same
+#             averaged_cp_wick_profile = npx.array([
+#                 npx.mean(current_cp_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+#             ])
+#             cp_wick_profiles.append(averaged_cp_wick_profile)
+
+#             # Capture thermal conductivity profiles (k is FaceVariable, average to cell centers first)
+#             current_k_face_values = k.value
+#             # cellFaceIDs was defined earlier as npx.array(mesh.cellFaceIDs)
+#             # Average k values of faces surrounding each cell to get a cell-centered k
+#             cell_avg_k = npx.mean(current_k_face_values[cellFaceIDs], axis=0)
+            
+#             k_top_wall_profiles.append(cell_avg_k[top_wall_mask].copy())
+#             k_vc_profiles.append(cell_avg_k[vc_cells].copy())
+
+#             # Handle wick cells thermal conductivity - average for each unique x-coordinate
+#             current_k_wick_all_cells = cell_avg_k[wick_cells].copy()
+#             # current_x_wick_all_cells and unique_x_wick are already defined and can be reused from density/cp calculation
+#             averaged_k_wick_profile = npx.array([
+#                 npx.mean(current_k_wick_all_cells[current_x_wick_all_cells == ux]) for ux in unique_x_wick
+#             ])
+#             k_wick_profiles.append(averaged_k_wick_profile)
+            
+#         next_measure_time_idx += 1
+#         # Ensure we advance past all measure_times that are less than or equal to current t
+#         while next_measure_time_idx < len(measure_times) and measure_times[next_measure_time_idx] <= t:
+#             next_measure_time_idx +=1
+#     # endregion
 
 end_time = time.time() # Record end time
 elapsed_time = end_time - start_time
@@ -216,6 +333,7 @@ print(f"Simulated time: {t_end} seconds")
 print(f"Actual execution time: {elapsed_time:.2f} seconds")
 print("%d cells on processor %d of %d" % (mesh.numberOfCells, parallelComm.procID, parallelComm.Nproc))
 
+# region plotting
 # Get x-coordinates for top wall cells
 x_top_wall = x_cell[top_wall_mask]
 
@@ -235,26 +353,135 @@ plt.tight_layout()
 plt.savefig("plots/top_wall_axial_profiles.png", dpi=300)
 plt.show()
 
-# save the results
-import os
-results_dir = "results"
-os.makedirs(results_dir, exist_ok=True)
+# Plotting for Density in Top Wall Cells
+plt.figure(figsize=(10, 6))
+for i, (rho_profile, t_plot) in enumerate(zip(rho_top_wall_profiles, actual_profile_times)):
+    plt.plot(x_top_wall_sorted, rho_profile[sort_idx], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Density [kg/m^3]")
+plt.title("Axial Density Profile in Topmost Wall Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/top_wall_density_profiles.png", dpi=300)
+plt.show()
 
-npx.save(os.path.join(results_dir, "x_top_wall_sorted.npy"), x_top_wall_sorted)
-npx.save(os.path.join(results_dir, "profiles.npy"), npx.array(profiles))
-npx.save(os.path.join(results_dir, "actual_profile_times.npy"), npx.array(actual_profile_times))
+# Plotting for Density in Vapor Core Cells
+x_vc_all = x_cell[vc_cells]
+sort_idx_vc = x_vc_all.argsort()
+x_vc_sorted = x_vc_all[sort_idx_vc]
 
-serial_time = 23.47
+plt.figure(figsize=(10, 6))
+for i, (rho_profile, t_plot) in enumerate(zip(rho_vc_profiles, actual_profile_times)):
+    plt.plot(x_vc_sorted, rho_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Density [kg/m^3]")
+plt.title("Axial Density Profile in Vapor Core Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/vc_density_profiles.png", dpi=300)
+plt.show()
 
-parallel_times = [16.94, 18.69, 18.31, 18.50, 21.18, 22.23, 24.66, 30.41]
-# n_cpus = [1, 2, 3, 4, 5, 6, 7, 8]
+# Plotting for Density in Wick Cells (Averaged)
+# x_wick_plot_coords are the unique x-coordinates for the wick, already sorted from npx.unique
+x_wick_plot_coords = npx.unique(x_cell[wick_cells])
 
-# plt.figure(figsize=(10, 6))
-# plt.plot(n_cpus, parallel_times, marker='o', label='Parallel')
-# plt.axhline(y=serial_time, color='r', linestyle='--', label='Serial')
-# plt.xlabel("Number of CPUs")
-# plt.ylabel("Execution Time [s]")
-# plt.title("Execution Time vs Number of CPUs")
-# plt.legend()
-# plt.grid(True)
+plt.figure(figsize=(10, 6))
+for i, (rho_profile, t_plot) in enumerate(zip(rho_wick_profiles, actual_profile_times)):
+    # rho_profile is already averaged and corresponds to x_wick_plot_coords
+    plt.plot(x_wick_plot_coords, rho_profile, label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Average Density [kg/m^3]")
+plt.title("Axial Density Profile in Wick Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/wick_density_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Specific Heat in Top Wall Cells
+plt.figure(figsize=(10, 6))
+for i, (cp_profile, t_plot) in enumerate(zip(cp_top_wall_profiles, actual_profile_times)):
+    plt.plot(x_top_wall_sorted, cp_profile[sort_idx], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Specific Heat [J/kg*K]")
+plt.title("Axial Specific Heat Profile in Topmost Wall Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/top_wall_cp_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Specific Heat in Vapor Core Cells
+# x_vc_sorted and sort_idx_vc are already defined from density plots
+plt.figure(figsize=(10, 6))
+for i, (cp_profile, t_plot) in enumerate(zip(cp_vc_profiles, actual_profile_times)):
+    plt.plot(x_vc_sorted, cp_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Specific Heat [J/kg*K]")
+plt.title("Axial Specific Heat Profile in Vapor Core Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/vc_cp_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Specific Heat in Wick Cells (Averaged)
+# x_wick_plot_coords is already defined from density plots
+plt.figure(figsize=(10, 6))
+for i, (cp_profile, t_plot) in enumerate(zip(cp_wick_profiles, actual_profile_times)):
+    plt.plot(x_wick_plot_coords, cp_profile, label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Average Specific Heat [J/kg*K]")
+plt.title("Axial Specific Heat Profile in Wick Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/wick_cp_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Thermal Conductivity in Top Wall Cells
+# x_top_wall_sorted and sort_idx are already defined
+plt.figure(figsize=(10, 6))
+for i, (k_profile, t_plot) in enumerate(zip(k_top_wall_profiles, actual_profile_times)):
+    plt.plot(x_top_wall_sorted, k_profile[sort_idx], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Thermal Conductivity [W/m*K]")
+plt.title("Axial Thermal Conductivity Profile in Topmost Wall Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/top_wall_k_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Thermal Conductivity in Vapor Core Cells
+# x_vc_sorted and sort_idx_vc are already defined
+plt.figure(figsize=(10, 6))
+for i, (k_profile, t_plot) in enumerate(zip(k_vc_profiles, actual_profile_times)):
+    plt.plot(x_vc_sorted, k_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Thermal Conductivity [W/m*K]")
+plt.title("Axial Thermal Conductivity Profile in Vapor Core Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/vc_k_profiles.png", dpi=300)
+plt.show()
+
+# Plotting for Thermal Conductivity in Wick Cells (Averaged)
+# x_wick_plot_coords is already defined
+plt.figure(figsize=(10, 6))
+for i, (k_profile, t_plot) in enumerate(zip(k_wick_profiles, actual_profile_times)):
+    plt.plot(x_wick_plot_coords, k_profile, label=f"t = {t_plot:.2f} s")
+plt.xlabel("x [m]")
+plt.ylabel("Average Thermal Conductivity [W/m*K]")
+plt.title("Axial Thermal Conductivity Profile in Wick Cells at Different Times")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("plots/wick_k_profiles.png", dpi=300)
+plt.show()
+# endregion
+
 input("Press Enter to continue...")
