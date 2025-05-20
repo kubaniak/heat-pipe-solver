@@ -102,7 +102,7 @@ k = vc_properties['thermal_conductivity'](T.faceValue, mesh, 'evap_cond', sodium
     + wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) * (wick_faces) \
     + steel_properties['thermal_conductivity'](T.faceValue) * (wall_faces)
 
-k_viewer = CellVariable(mesh=mesh, value=k)
+k_viewer = FaceVariable(mesh=mesh, value=k)
 
 cp = vc_properties['specific_heat'](T) * (vc_evap_cond_cells) \
     + vc_properties['specific_heat'](T) * (vc_adiabatic_cells) \
@@ -114,6 +114,8 @@ rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
     + steel_properties['density_evap_adia'](T) * (wall_cells)
 
+
+dt = 0.02
 
 # Define boundary condition masks
 faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x_face > dimensions['L_input_left'])))
@@ -138,18 +140,16 @@ a = FaceVariable(mesh=mesh, value=h*n, rank=1)
 b = FaceVariable(mesh=mesh, value=k, rank=0)
 g = FaceVariable(mesh=mesh, value=h*T_amb, rank=0)
 RobinCoeff = faces_condenser * k * n / (dPf.dot(a) + b)
-eq = (TransientTerm(coeff=rho*cp, var=T) == DiffusionTerm(coeff=Gamma, var=T) + (RobinCoeff * g).divergence
+eq = (ImplicitSourceTerm(coeff=cp * rho / dt, var=T) - rho * cp * T.old / dt == DiffusionTerm(coeff=Gamma, var=T) + (RobinCoeff * g).divergence
        - ImplicitSourceTerm(coeff=(RobinCoeff * a.dot(n)).divergence, var=T)
        + (faces_evaporator * (q/k)).divergence)
 
 T.setValue(T_amb)  # Set initial temperature
 
-dt = 0.02
-t_end = 3000.0 # seconds
+t_end = 600.0 # seconds
 
-# Try plotting k
-# viewer = Viewer(vars=T, title="Temperature Distribution")
-# viewer.plot()
+viewer = Viewer(vars=T, title="Temperature Distribution")
+viewer.plot()
 
 measure_times = [1, 5, 10, 20, 50]
 measure_times.extend(range(100, 3001, 100)) # seconds
@@ -191,22 +191,23 @@ print(f"Simulating for {t_end} seconds...")
 #     #     if __name__ == "__main__":
 #     #         viewer.plot()
 
-# TRY with guyer implementation in equation
 # Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
-sweeps = 5
+sweeps = 2
 timestep = 0
-for t in range(int(t_end/dt)):
+for t in npx.arange(0, t_end, dt):
     T.updateOld()
-    # UPDATE k HERE!
+    k_viewer.setValue(k)
     for sweep in range(sweeps):
         res = eq.sweep(var=T, dt=dt)
-        print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
-    # if __name__ == "__main__":
-    #     viewer.plot()
+        # print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
+    if t % 5 == 0:
+        if __name__ == "__main__":
+            viewer.plot()
+
     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
-        print(f"Time {t*dt:.2f}")
+        print(f"Time {t:.2f}, Residual: {res}")
         profiles.append(T.value[top_wall_mask].copy())
-        actual_profile_times.append(t*dt)
+        actual_profile_times.append(t)
         next_measure_time_idx += 1
 
 end_time = time.time() # Record end time
