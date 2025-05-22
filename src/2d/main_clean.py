@@ -90,7 +90,7 @@ wall_cond_faces = wall_faces & (x_face > (dimensions['L_e'] + dimensions['L_a'])
 # preview_face_mask(mesh, wick_faces, title="Wick Faces")
 # preview_face_mask(mesh, vc_faces, title="Vapor Core Faces")
 # preview_face_mask(mesh, vc_evap_cond_faces, title="Vapor Core Evaporator and Condenser Faces")
-preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
+# preview_face_mask(mesh, vc_adiabatic_faces, title="Vapor Core Adiabatic Faces")
 
 # preview_face_mask(mesh, vc_evap_cond_faces | vc_adiabatic_faces | wick_faces | wall_faces, title="All Faces")
 # endregion
@@ -111,7 +111,7 @@ rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
     + steel_properties['density_evap_adia'](T) * (wall_cells)
 
-t_end = 15.0
+t_end = 6000.0
 dt = 0.02
 
 # Define boundary condition masks
@@ -146,8 +146,7 @@ T.setValue(T_amb)  # Set initial temperature
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
 
-measure_times = [1, 5, 10, 15, 20, 50]
-measure_times.extend(range(100, 3001, 100)) # seconds
+measure_times = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]
 print(f"Measuring at: {measure_times} seconds")
 
 # region plotting
