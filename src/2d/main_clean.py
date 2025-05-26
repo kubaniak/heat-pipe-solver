@@ -22,17 +22,18 @@ wick_properties = get_wick_properties()
 sodium_properties = get_sodium_properties()
 
 L_total = all_params['L_e'] + all_params['L_a'] + all_params['L_c']
-R_total = all_params['R_wick'] + all_params['R_wall'] + all_params['R_vc']
+R_total = all_params['R_wall']
 
 # mesh = generate_mesh_2d(L_total, R_total, mesh_params['nx_wall'], 20)
 mesh, cell_types = generate_composite_mesh(mesh_params, dimensions)
-x_face, y_face = mesh.faceCenters
-x_cell, y_cell = mesh.cellCenters
+r_face, z_face = mesh.faceCenters
+r_cell, z_cell = mesh.cellCenters
+print(f"Number of cells: {mesh.numberOfCells}")
 
 T = CellVariable(name="Temperature", mesh=mesh, value=all_params["T_amb"], hasOld=False)
 
 T_amb = parameters['T_amb'] # Used as reference temperature (e.g., 290K)
-h = 750.0
+h = 5.0
 
 # region simple properties
 # constants
@@ -59,30 +60,25 @@ h = 750.0
 # endregion
 
 # region property masks
-vc_evap_cond_cells = (cell_types == 0)
-vc_adiabatic_cells = (cell_types == 1)
-vc_cells = vc_evap_cond_cells | vc_adiabatic_cells
-wick_cells = (cell_types == 10) | (cell_types == 11)
-wall_cells = (cell_types == 20) | (cell_types == 21)
-wall_cond_cells = wall_cells & (x_cell > dimensions['L_e'] + dimensions['L_a'])
-wall_evap_adia_cells = wall_cells & (x_cell < dimensions['L_e'] + dimensions['L_a']) # Wall in evaporator and adiabatic regions
+vc_cells = (r_cell < dimensions['R_vc'])
+vc_evap_cond_cells = vc_cells & ((z_cell < dimensions['L_e']) | (z_cell > (dimensions['L_e'] + dimensions['L_a'])))
+vc_adiabatic_cells = vc_cells & ((z_cell > dimensions['L_e']) & (z_cell < dimensions['L_e'] + dimensions['L_a']))
+wick_cells = ((dimensions['R_vc'] < r_cell) & (r_cell < dimensions['R_wick']))
+wall_cells = (r_cell > dimensions['R_wick'])
 
 # preview_cell_mask(mesh, vc_evap_cond_cells, title="Vapor Core Evaporator and Condenser Region")
 # preview_cell_mask(mesh, vc_adiabatic_cells, title="Vapor Core Adiabatic Region")
+# preview_cell_mask(mesh, vc_cells, title="Vapor Core Region")
 # preview_cell_mask(mesh, wick_cells, title="Wick Region")
 # preview_cell_mask(mesh, wall_cells, title="Wall Region")
-# preview_cell_mask(mesh, wall_cond_cells, title="Wall Condenser Region")
-# preview_cell_mask(mesh, wall_evap_adia_cells, title="Wall Evaporator and Adiabatic Region")
 
 # preview_cell_mask(mesh, vc_evap_cond_cells | vc_adiabatic_cells | wick_cells | wall_cells, title="All Cells") 
 
-vc_faces = (dimensions['R_vc'] >= y_face)
-vc_evap_cond_faces = vc_faces & ((x_face < dimensions['L_e']) | (x_face > (dimensions['L_e'] + dimensions['L_a'])))
-vc_adiabatic_faces = vc_faces & ((x_face > (dimensions['L_e'])) & (x_face < dimensions['L_e'] + dimensions['L_a']))
-wick_faces = (dimensions['R_vc'] < y_face) & (y_face < dimensions['R_wick'])
-wall_faces = dimensions['R_wick'] < y_face
-wall_evap_adia_faces = wall_faces & (x_face < (dimensions['L_e'] + dimensions['L_a']))
-wall_cond_faces = wall_faces & (x_face > (dimensions['L_e'] + dimensions['L_a']))
+vc_faces = (r_face <= dimensions['R_vc'])
+vc_evap_cond_faces = vc_faces & ((z_face < dimensions['L_e']) | (z_face > (dimensions['L_e'] + dimensions['L_a'])))
+vc_adiabatic_faces = vc_faces & ((z_face > dimensions['L_e']) & (z_face < dimensions['L_e'] + dimensions['L_a']))
+wick_faces = ((dimensions['R_vc'] < r_face) & (r_face < dimensions['R_wick']))
+wall_faces = (r_face > dimensions['R_wick'])
 
 # preview_face_mask(mesh, wall_faces, title="Wall Faces")
 # preview_face_mask(mesh, wall_evap_adia_faces, title="Wall Evaporator and Adiabatic Faces")
@@ -96,6 +92,15 @@ wall_cond_faces = wall_faces & (x_face > (dimensions['L_e'] + dimensions['L_a'])
 # endregion
 
 # Real temperature-dependent properties
+# k = vc_properties['thermal_conductivity'](T.faceValue, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) * (vc_evap_cond_faces) \
+#     + vc_properties['thermal_conductivity'](T.faceValue, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) * (vc_adiabatic_faces) \
+#     + wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) * (wick_faces) \
+#     + steel_properties['thermal_conductivity'](T.faceValue) * (wall_faces)
+
+# k_vc = 40
+# k_wick = 20
+# k_wall = 55
+
 k = vc_properties['thermal_conductivity'](T.faceValue, mesh, 'evap_cond', sodium_properties, dimensions, parameters, constants) * (vc_evap_cond_faces) \
     + vc_properties['thermal_conductivity'](T.faceValue, mesh, 'adiabatic', sodium_properties, dimensions, parameters, constants) * (vc_adiabatic_faces) \
     + wick_properties['thermal_conductivity'](T.faceValue, sodium_properties, steel_properties, parameters) * (wick_faces) \
@@ -111,12 +116,15 @@ rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
     + steel_properties['density_evap_adia'](T) * (wall_cells)
 
-t_end = 6000.0
-dt = 0.02
+t_end = 3001.0
+dt = 0.1
 
 # Define boundary condition masks
-faces_evaporator = (mesh.facesTop & ((x_face < dimensions['L_input_right']) & (x_face > dimensions['L_input_left'])))
-faces_condenser = (mesh.facesTop & (x_face > (dimensions['L_e'] + dimensions['L_a'])) & (x_face < L_total))
+faces_evaporator = (mesh.facesRight & ((z_face < dimensions['L_input_right']) & (z_face > dimensions['L_input_left'])))
+faces_condenser = (mesh.facesRight & (z_face > (dimensions['L_e'] + dimensions['L_a'])) & (z_face < L_total))
+
+# preview_face_mask(mesh, faces_evaporator, title="Evaporator Faces")
+# preview_face_mask(mesh, faces_condenser, title="Condenser Faces")
 
 # Constant influx
 q = parameters['Q_input_flux']
@@ -146,13 +154,16 @@ T.setValue(T_amb)  # Set initial temperature
 # viewer = Viewer(vars=T, title="Temperature Distribution")
 # viewer.plot()
 
-measure_times = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]
+# measure_times = [1038, 1998, 2958]
+measure_times = [] 
+measure_times.extend(range(0, int(t_end), 200))
+# measure_times = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # For testing purposes
 print(f"Measuring at: {measure_times} seconds")
 
 # region plotting
 # Find topmost wall cells: any face of the cell is a top face
 cellFaceIDs = npx.array(mesh.cellFaceIDs)  # shape: (nFacesPerCell, nCells)
-facesTop = npx.array(mesh.facesTop)        # shape: (nFaces,)
+facesTop = npx.array(mesh.facesRight)        # shape: (nFaces,)
 
 # For each cell, check if any of its faces are top faces
 top_wall_mask = wall_cells & npx.any(facesTop[cellFaceIDs], axis=0)
@@ -190,7 +201,6 @@ for t in npx.arange(0, t_end, dt):
     # eq.solve(var=T, dt=dt)
     res = eq.sweep(var=T, dt=dt)
     # Capture profile if current time t is at or just past a scheduled measure_time
-    # region saving profiles
     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
         current_time_step = t # Use the actual time t from the loop for consistency
         if not actual_profile_times or actual_profile_times[-1] < current_time_step: # Ensure we only add once per measure point
@@ -205,7 +215,7 @@ for t in npx.arange(0, t_end, dt):
 
             # Handle wick cells density - average for each unique x-coordinate
             current_rho_wick_all_cells = current_rho_values[wick_cells].copy()
-            current_x_wick_all_cells = x_cell[wick_cells]
+            current_x_wick_all_cells = z_cell[wick_cells]
             
             unique_x_wick = npx.unique(current_x_wick_all_cells) # Sorted unique x-coordinates
             averaged_rho_wick_profile = npx.array([
@@ -247,7 +257,6 @@ for t in npx.arange(0, t_end, dt):
         # Ensure we advance past all measure_times that are less than or equal to current t
         while next_measure_time_idx < len(measure_times) and measure_times[next_measure_time_idx] <= t:
             next_measure_time_idx +=1
-    # endregion
 
     # if t % 5 == 0:
     #     if __name__ == "__main__":
@@ -334,15 +343,50 @@ print("%d cells on processor %d of %d" % (mesh.numberOfCells, parallelComm.procI
 
 # region plotting
 # Get x-coordinates for top wall cells
-x_top_wall = x_cell[top_wall_mask]
+x_top_wall = z_cell[top_wall_mask]
 
 # Sort by x for plotting
 sort_idx = x_top_wall.argsort()
 x_top_wall_sorted = x_top_wall[sort_idx]
 
+import pandas as pd
+
+# Define paths to experimental data files and their corresponding times in seconds
+experimental_data_files = {
+    1038: "Faghri_Data/Faghiri_17_3.csv",  # 17.3 minutes
+    1998: "Faghri_Data/Faghiri_33_3.csv",  # 33.3 minutes
+    2958: "Faghri_Data/Faghiri_49_3.csv"   # 49.3 minutes
+}
+# Tolerance for matching simulation time with experimental time keys
+# dt is defined earlier in the script (e.g., dt = 0.03)
+time_tolerance = dt 
+
 plt.figure(figsize=(10, 6))
 for i, (T_profile, t_plot) in enumerate(zip(profiles, actual_profile_times)): # Use actual_profile_times
-    plt.plot(x_top_wall_sorted, T_profile[sort_idx], label=f"t = {t_plot:.2f} s")
+    plt.plot(x_top_wall_sorted, T_profile[sort_idx], label=f"Sim. t = {t_plot:.2f} s ({t_plot/60:.1f} min)")
+    # Additions for experimental data plotting
+    for exp_time_s, file_path in experimental_data_files.items():
+        if abs(t_plot - exp_time_s) < time_tolerance:
+            try:
+                # Assuming the script is run from the workspace root directory
+                # where 'Faghri_Data' is a subdirectory.
+                exp_df = pd.read_csv(file_path)
+                
+                temp_to_plot = exp_df['y'] 
+                
+                plt.scatter(exp_df['x'], temp_to_plot, marker='o', s=40, edgecolor='black', facecolor='none',
+                            label=f"Exp. ({exp_time_s/60:.1f} min)")
+            except FileNotFoundError:
+                print(f"Warning: Experimental data file not found: {file_path}")
+            except KeyError:
+                # This could happen if CSV columns are not named 'x' and 'y'
+                print(f"Warning: CSV file {file_path} might be missing 'x' or 'y' columns.")
+            except Exception as e:
+                print(f"Warning: Could not plot experimental data from {file_path}. Error: {e}")
+            # Break after attempting to plot for the first matching experimental time
+            # This assumes one experimental dataset per simulation snapshot.
+            break 
+
 plt.xlabel("x [m]")
 plt.ylabel("Temperature [K]")
 plt.title("Axial Temperature Profile in Topmost Wall Cells at Different Times")
@@ -366,7 +410,7 @@ plt.savefig("plots/top_wall_density_profiles.png", dpi=300)
 plt.show()
 
 # Plotting for Density in Vapor Core Cells
-x_vc_all = x_cell[vc_cells]
+x_vc_all = z_cell[vc_cells]
 sort_idx_vc = x_vc_all.argsort()
 x_vc_sorted = x_vc_all[sort_idx_vc]
 
@@ -384,7 +428,7 @@ plt.show()
 
 # Plotting for Density in Wick Cells (Averaged)
 # x_wick_plot_coords are the unique x-coordinates for the wick, already sorted from npx.unique
-x_wick_plot_coords = npx.unique(x_cell[wick_cells])
+x_wick_plot_coords = npx.unique(z_cell[wick_cells])
 
 plt.figure(figsize=(10, 6))
 for i, (rho_profile, t_plot) in enumerate(zip(rho_wick_profiles, actual_profile_times)):

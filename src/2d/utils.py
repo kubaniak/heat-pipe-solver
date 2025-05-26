@@ -85,16 +85,13 @@ def preview_cell_mask(mesh, mask, title="Mesh with Cell Masks"):
     plt.figure(figsize=(10, 5))
     plt.scatter(x_cells, y_cells, marker='o', color='lightgray', s=10, label='Cells')
 
-    # Get the mask values corresponding to each cell.
-    mask_values = mask.value
-
     # We can plot only the cells where the mask is non-zero
-    nonzero = mask_values != 0
+    nonzero = mask != 0
 
     # Use a colormap to show different mask values (e.g., 1 vs 2).
     # You could use a fixed color mapping if only a few values exist.
     plt.scatter(x_cells[nonzero], y_cells[nonzero],
-                marker='s', s=50, c=mask_values[nonzero],
+                marker='s', s=50, c=mask[nonzero],
                 cmap='viridis', edgecolor='k', label='Mask')
 
     plt.title(title)
