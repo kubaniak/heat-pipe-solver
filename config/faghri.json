@@ -5,7 +5,7 @@
         "emissivity": 0.645,
         "porosity_wick": 0.7,
         "M_g_sodium": 0.02299,
-        "delta_T_sodium": 0.1,
+        "delta_T_sodium": 0.5,
         "T_melting_sodium": 370.98,
         "T_amb": 290.0
     },
@@ -21,7 +21,7 @@
         },
     "mesh": {
         "nx_wall": 500,
-        "nr_wall": 10,
+        "nr_wall": 6,
         "nx_wick": 500,
         "nr_wick": 2,
         "nx_vc": 500,
