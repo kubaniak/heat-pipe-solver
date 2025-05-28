@@ -9,6 +9,7 @@ from mesh import generate_mesh_2d
 from matplotlib import pyplot as plt
 import time 
 from fipy import parallelComm
+import glob # Added import
 
 all_params = get_all_params()
 mesh_params = get_param_group('mesh')
@@ -64,13 +65,21 @@ vc_cells = (r_cell < dimensions['R_vc'])
 vc_evap_cond_cells = vc_cells & ((z_cell < dimensions['L_e']) | (z_cell > (dimensions['L_e'] + dimensions['L_a'])))
 vc_adiabatic_cells = vc_cells & ((z_cell > dimensions['L_e']) & (z_cell < dimensions['L_e'] + dimensions['L_a']))
 wick_cells = ((dimensions['R_vc'] < r_cell) & (r_cell < dimensions['R_wick']))
+wick_evap_adia_cells = wick_cells & ((z_cell < dimensions['L_e'] + dimensions['L_a']))
+wick_cond_cells = wick_cells & (z_cell > (dimensions['L_e'] + dimensions['L_a']))
 wall_cells = (r_cell > dimensions['R_wick'])
+wall_evap_adia_cells = wall_cells & ((z_cell < dimensions['L_e'] + dimensions['L_a']))
+wall_cond_cells = wall_cells & (z_cell > (dimensions['L_e'] + dimensions['L_a']))
 
 # preview_cell_mask(mesh, vc_evap_cond_cells, title="Vapor Core Evaporator and Condenser Region")
 # preview_cell_mask(mesh, vc_adiabatic_cells, title="Vapor Core Adiabatic Region")
 # preview_cell_mask(mesh, vc_cells, title="Vapor Core Region")
 # preview_cell_mask(mesh, wick_cells, title="Wick Region")
+# preview_cell_mask(mesh, wick_evap_adia_cells, title="Wick Evaporator and Adiabatic Region")
+# preview_cell_mask(mesh, wick_cond_cells, title="Wick Condenser Region")
 # preview_cell_mask(mesh, wall_cells, title="Wall Region")
+# preview_cell_mask(mesh, wall_evap_adia_cells, title="Wall Evaporator and Adiabatic Region")
+# preview_cell_mask(mesh, wall_cond_cells, title="Wall Condenser Region")
 
 # preview_cell_mask(mesh, vc_evap_cond_cells | vc_adiabatic_cells | wick_cells | wall_cells, title="All Cells") 
 
@@ -104,9 +113,10 @@ cp = vc_properties['specific_heat'](T) * (vc_evap_cond_cells) \
 rho = vc_properties['density'](T) * (vc_evap_cond_cells) \
     + vc_properties['density'](T) * (vc_adiabatic_cells) \
     + wick_properties['density'](T, sodium_properties, steel_properties, parameters) * (wick_cells) \
-    + steel_properties['density_evap_adia'](T) * (wall_cells)
+    + steel_properties['density_evap_adia'](T) * (wall_evap_adia_cells) \
+    + steel_properties['density_cond'](T) * (wall_cond_cells)
 
-t_end = 3001.0
+t_end = 101.0
 dt = 0.1
 
 # Define boundary condition masks
@@ -135,7 +145,7 @@ a = FaceVariable(mesh=mesh, value=h*n, rank=1)
 b = FaceVariable(mesh=mesh, value=k, rank=0)
 g = FaceVariable(mesh=mesh, value=h*T_amb, rank=0)
 RobinCoeff = faces_condenser * k * n / (dPf.dot(a) + b)
-eq = (ImplicitSourceTerm(coeff=cp * rho / dt, var=T) - rho * cp * T.old / dt == DiffusionTerm(coeff=Gamma, var=T) + (RobinCoeff * g).divergence
+eq = (TransientTerm(coeff=cp*rho, var=T) == DiffusionTerm(coeff=Gamma, var=T) + (RobinCoeff * g).divergence
        - ImplicitSourceTerm(coeff=(RobinCoeff * a.dot(n)).divergence, var=T)
        + (faces_evaporator * (q/k)).divergence)
 
@@ -146,7 +156,7 @@ T.setValue(T_amb)  # Set initial temperature
 
 # measure_times = [1038, 1998, 2958]
 measure_times = [] 
-measure_times.extend(range(0, int(t_end), 200))
+measure_times.extend(range(5, int(t_end), 5))
 # measure_times = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # For testing purposes
 print(f"Measuring at: {measure_times} seconds")
 
@@ -253,20 +263,17 @@ for t in npx.arange(0, t_end, dt):
     #         viewer.plot()
 # endregion
 
-# region Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
-# sweeps = 2
-# timestep = 0
+# # region Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
+# sweeps = 5
 # for t in npx.arange(0, t_end, dt):
 #     T.updateOld()
 #     for sweep in range(sweeps):
 #         res = eq.sweep(var=T, dt=dt)
-#         # print(f"Iteration {t}, Sweep {sweep}, Residual: {res}")
+#         # print(f"Time {t:.2f}, Sweep {sweep}, Residual: {res}")
 #     # if t % 5 == 0:
 #     #     if __name__ == "__main__":
 #     #         viewer.plot()
 
-
-#     # region saving profiles
 #     if next_measure_time_idx < len(measure_times) and t >= measure_times[next_measure_time_idx]:
 #         current_time_step = t # Use the actual time t from the loop for consistency
 #         if not actual_profile_times or actual_profile_times[-1] < current_time_step: # Ensure we only add once per measure point
@@ -281,7 +288,7 @@ for t in npx.arange(0, t_end, dt):
 
 #             # Handle wick cells density - average for each unique x-coordinate
 #             current_rho_wick_all_cells = current_rho_values[wick_cells].copy()
-#             current_x_wick_all_cells = x_cell[wick_cells]
+#             current_x_wick_all_cells = z_cell[wick_cells]
             
 #             unique_x_wick = npx.unique(current_x_wick_all_cells) # Sorted unique x-coordinates
 #             averaged_rho_wick_profile = npx.array([
@@ -323,7 +330,7 @@ for t in npx.arange(0, t_end, dt):
 #         # Ensure we advance past all measure_times that are less than or equal to current t
 #         while next_measure_time_idx < len(measure_times) and measure_times[next_measure_time_idx] <= t:
 #             next_measure_time_idx +=1
-#     # endregion
+# # endregion
 
 end_time = time.time() # Record end time
 elapsed_time = end_time - start_time
@@ -332,6 +339,26 @@ print(f"Actual execution time: {elapsed_time:.2f} seconds")
 print("%d cells on processor %d of %d" % (mesh.numberOfCells, parallelComm.procID, parallelComm.Nproc))
 
 # region plotting
+# Import the plotting function from your other script
+# Make sure plot_riccardo_data.py is in a location where Python can find it (e.g., same directory or in PYTHONPATH)
+# For this example, assuming it's in the same directory or src/2d/
+import sys
+import os
+# Add the directory containing plot_riccardo_data to sys.path if it's not already discoverable
+# This assumes plot_riccardo_data.py is in the same directory as main_clean.py (src/2d)
+module_path = os.path.dirname(__file__) 
+if module_path not in sys.path:
+    sys.path.append(module_path)
+try:
+    from plot_riccardo_data import plot_property_over_time as plot_riccardo_property
+    can_plot_riccardo = True
+except ImportError:
+    print("Warning: Could not import 'plot_riccardo_data'. Riccardo data overlay will be disabled.")
+    can_plot_riccardo = False
+
+# Toggle for Riccardo data comparison
+PLOT_RICCARDO_COMPARISON = True # Set to False to disable Riccardo data overlay
+
 # Get x-coordinates for top wall cells
 x_top_wall = z_cell[top_wall_mask]
 
@@ -380,141 +407,146 @@ for i, (T_profile, t_plot) in enumerate(zip(profiles, actual_profile_times)): # 
 plt.xlabel("x [m]")
 plt.ylabel("Temperature [K]")
 plt.title("Axial Temperature Profile in Topmost Wall Cells at Different Times")
-plt.legend()
+# plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.savefig("plots/top_wall_axial_profiles.png", dpi=300)
 plt.show()
 
+# --- Generic plotting function for simulation data ---
+def plot_simulation_data(x_coords, sim_profiles, sim_times, title, ylabel, output_filename, 
+                         sort_indices=None, # Added for cases where x_coords might not be pre-sorted with profiles
+                         riccardo_region_code=None, riccardo_property_column=None, riccardo_base_path=None):
+    plt.figure(figsize=(10, 6))
+    ax = plt.gca() # Get current axes for potential overlay
+
+    # Plot simulation data
+    for i, (profile, t_plot) in enumerate(zip(sim_profiles, sim_times)):
+        if sort_indices is not None:
+            ax.plot(x_coords, profile[sort_indices], label=f"Sim. t = {t_plot:.2f} s")
+        else:
+            ax.plot(x_coords, profile, label=f"Sim. t = {t_plot:.2f} s") # Assumes x_coords and profile are already aligned/sorted
+
+    # Overlay Riccardo data if enabled and applicable
+    if PLOT_RICCARDO_COMPARISON and can_plot_riccardo and riccardo_region_code and riccardo_property_column and riccardo_base_path:
+        riccardo_file_pattern = os.path.join(riccardo_base_path, f'{riccardo_region_code}_properties_Faghri_ax1000_TS_bra_StepFct05_properties_h5_*.000_s.csv')
+        riccardo_files = glob.glob(riccardo_file_pattern)
+        if riccardo_files:
+            print(f"Overlaying Riccardo data for {riccardo_region_code} - {riccardo_property_column} on {title}")
+            plot_riccardo_property(
+                file_paths=riccardo_files,
+                property_column_name=riccardo_property_column,
+                y_label=ylabel, # y_label is the same
+                title=title, # Title is managed by the main plot
+                output_filename="", # Not saving separately
+                ax=ax, # Pass the current axes
+                label_prefix="Riccardo ",
+                plot_kwargs={'linestyle': '--'} # Dashed lines for Riccardo data
+            )
+        else:
+            print(f"Warning: No Riccardo files found for {riccardo_region_code} at {riccardo_base_path}")
+
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    # ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_filename, dpi=300)
+    plt.show()
+
+# Define base path for Riccardo data (relative to workspace root)
+riccardo_data_base_path = os.path.join(os.getcwd(), "Properties_riccardo", "Properties")
+
 # Plotting for Density in Top Wall Cells
-plt.figure(figsize=(10, 6))
-for i, (rho_profile, t_plot) in enumerate(zip(rho_top_wall_profiles, actual_profile_times)):
-    plt.plot(x_top_wall_sorted, rho_profile[sort_idx], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Density [kg/m^3]")
-plt.title("Axial Density Profile in Topmost Wall Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/top_wall_density_profiles.png", dpi=300)
-plt.show()
+plot_simulation_data(
+    x_top_wall_sorted, rho_top_wall_profiles, actual_profile_times,
+    "Axial Density Profile in Topmost Wall Cells at Different Times", "Density [kg/m^3]",
+    "plots/top_wall_density_profiles.png",
+    sort_indices=sort_idx, # Pass the sort_idx for top wall
+    riccardo_region_code="Wall", riccardo_property_column='Density (kg/m^3)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Density in Vapor Core Cells
 x_vc_all = z_cell[vc_cells]
-sort_idx_vc = x_vc_all.argsort()
-x_vc_sorted = x_vc_all[sort_idx_vc]
+_sort_idx_vc = x_vc_all.argsort() # Renamed to avoid conflict if main_clean uses sort_idx_vc later
+x_vc_sorted_for_plot = x_vc_all[_sort_idx_vc]
 
-plt.figure(figsize=(10, 6))
-for i, (rho_profile, t_plot) in enumerate(zip(rho_vc_profiles, actual_profile_times)):
-    plt.plot(x_vc_sorted, rho_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Density [kg/m^3]")
-plt.title("Axial Density Profile in Vapor Core Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/vc_density_profiles.png", dpi=300)
-plt.show()
+plot_simulation_data(
+    x_vc_sorted_for_plot, rho_vc_profiles, actual_profile_times,
+    "Axial Density Profile in Vapor Core Cells at Different Times", "Density [kg/m^3]",
+    "plots/vc_density_profiles.png",
+    sort_indices=_sort_idx_vc, # Pass the sort_idx for VC
+    riccardo_region_code="VC", riccardo_property_column='Density (kg/m^3)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Density in Wick Cells (Averaged)
-# x_wick_plot_coords are the unique x-coordinates for the wick, already sorted from npx.unique
-x_wick_plot_coords = npx.unique(z_cell[wick_cells])
+x_wick_plot_coords_for_plot = npx.unique(z_cell[wick_cells]) # Define before use
 
-plt.figure(figsize=(10, 6))
-for i, (rho_profile, t_plot) in enumerate(zip(rho_wick_profiles, actual_profile_times)):
-    # rho_profile is already averaged and corresponds to x_wick_plot_coords
-    plt.plot(x_wick_plot_coords, rho_profile, label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Average Density [kg/m^3]")
-plt.title("Axial Density Profile in Wick Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/wick_density_profiles.png", dpi=300)
-plt.show()
+plot_simulation_data(
+    x_wick_plot_coords_for_plot, rho_wick_profiles, actual_profile_times,
+    "Axial Density Profile in Wick Cells at Different Times", "Average Density [kg/m^3]",
+    "plots/wick_density_profiles.png",
+    # No sort_indices needed here as rho_wick_profiles are already averaged and aligned with unique x_wick_plot_coords
+    riccardo_region_code="Wick", riccardo_property_column='Density (kg/m^3)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Specific Heat in Top Wall Cells
-plt.figure(figsize=(10, 6))
-for i, (cp_profile, t_plot) in enumerate(zip(cp_top_wall_profiles, actual_profile_times)):
-    plt.plot(x_top_wall_sorted, cp_profile[sort_idx], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Specific Heat [J/kg*K]")
-plt.title("Axial Specific Heat Profile in Topmost Wall Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/top_wall_cp_profiles.png", dpi=300)
-plt.show()
+plot_simulation_data(
+    x_top_wall_sorted, cp_top_wall_profiles, actual_profile_times,
+    "Axial Specific Heat Profile in Topmost Wall Cells at Different Times", "Specific Heat [J/kg*K]",
+    "plots/top_wall_cp_profiles.png",
+    sort_indices=sort_idx, # Pass the sort_idx for top wall
+    riccardo_region_code="Wall", riccardo_property_column='Specific Heat (J/kg-K)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Specific Heat in Vapor Core Cells
-# x_vc_sorted and sort_idx_vc are already defined from density plots
-plt.figure(figsize=(10, 6))
-for i, (cp_profile, t_plot) in enumerate(zip(cp_vc_profiles, actual_profile_times)):
-    plt.plot(x_vc_sorted, cp_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Specific Heat [J/kg*K]")
-plt.title("Axial Specific Heat Profile in Vapor Core Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/vc_cp_profiles.png", dpi=300)
-plt.show()
+# x_vc_sorted_for_plot and _sort_idx_vc are already defined from density plots
+plot_simulation_data(
+    x_vc_sorted_for_plot, cp_vc_profiles, actual_profile_times,
+    "Axial Specific Heat Profile in Vapor Core Cells at Different Times", "Specific Heat [J/kg*K]",
+    "plots/vc_cp_profiles.png",
+    sort_indices=_sort_idx_vc, # Pass the sort_idx for VC
+    riccardo_region_code="VC", riccardo_property_column='Specific Heat (J/kg-K)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Specific Heat in Wick Cells (Averaged)
-# x_wick_plot_coords is already defined from density plots
-plt.figure(figsize=(10, 6))
-for i, (cp_profile, t_plot) in enumerate(zip(cp_wick_profiles, actual_profile_times)):
-    plt.plot(x_wick_plot_coords, cp_profile, label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Average Specific Heat [J/kg*K]")
-plt.title("Axial Specific Heat Profile in Wick Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/wick_cp_profiles.png", dpi=300)
-plt.show()
+# x_wick_plot_coords_for_plot is already defined from density plots
+plot_simulation_data(
+    x_wick_plot_coords_for_plot, cp_wick_profiles, actual_profile_times,
+    "Axial Specific Heat Profile in Wick Cells at Different Times", "Average Specific Heat [J/kg*K]",
+    "plots/wick_cp_profiles.png",
+    riccardo_region_code="Wick", riccardo_property_column='Specific Heat (J/kg-K)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Thermal Conductivity in Top Wall Cells
 # x_top_wall_sorted and sort_idx are already defined
-plt.figure(figsize=(10, 6))
-for i, (k_profile, t_plot) in enumerate(zip(k_top_wall_profiles, actual_profile_times)):
-    plt.plot(x_top_wall_sorted, k_profile[sort_idx], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Thermal Conductivity [W/m*K]")
-plt.title("Axial Thermal Conductivity Profile in Topmost Wall Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/top_wall_k_profiles.png", dpi=300)
-plt.show()
+plot_simulation_data(
+    x_top_wall_sorted, k_top_wall_profiles, actual_profile_times,
+    "Axial Thermal Conductivity Profile in Topmost Wall Cells at Different Times", "Thermal Conductivity [W/m*K]",
+    "plots/top_wall_k_profiles.png",
+    sort_indices=sort_idx, # Pass the sort_idx for top wall
+    riccardo_region_code="Wall", riccardo_property_column='Thermal Conductivity (W/m-K)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Thermal Conductivity in Vapor Core Cells
-# x_vc_sorted and sort_idx_vc are already defined
-plt.figure(figsize=(10, 6))
-for i, (k_profile, t_plot) in enumerate(zip(k_vc_profiles, actual_profile_times)):
-    plt.plot(x_vc_sorted, k_profile[sort_idx_vc], label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Thermal Conductivity [W/m*K]")
-plt.title("Axial Thermal Conductivity Profile in Vapor Core Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/vc_k_profiles.png", dpi=300)
-plt.show()
+# x_vc_sorted_for_plot and _sort_idx_vc are already defined
+plot_simulation_data(
+    x_vc_sorted_for_plot, k_vc_profiles, actual_profile_times,
+    "Axial Thermal Conductivity Profile in Vapor Core Cells at Different Times", "Thermal Conductivity [W/m*K]",
+    "plots/vc_k_profiles.png",
+    sort_indices=_sort_idx_vc, # Pass the sort_idx for VC
+    riccardo_region_code="VC", riccardo_property_column='Thermal Conductivity (W/m-K)', riccardo_base_path=riccardo_data_base_path
+)
 
 # Plotting for Thermal Conductivity in Wick Cells (Averaged)
-# x_wick_plot_coords is already defined
-plt.figure(figsize=(10, 6))
-for i, (k_profile, t_plot) in enumerate(zip(k_wick_profiles, actual_profile_times)):
-    plt.plot(x_wick_plot_coords, k_profile, label=f"t = {t_plot:.2f} s")
-plt.xlabel("x [m]")
-plt.ylabel("Average Thermal Conductivity [W/m*K]")
-plt.title("Axial Thermal Conductivity Profile in Wick Cells at Different Times")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("plots/wick_k_profiles.png", dpi=300)
-plt.show()
+# x_wick_plot_coords_for_plot is already defined
+plot_simulation_data(
+    x_wick_plot_coords_for_plot, k_wick_profiles, actual_profile_times,
+    "Axial Thermal Conductivity Profile in Wick Cells at Different Times", "Average Thermal Conductivity [W/m*K]",
+    "plots/wick_k_profiles.png",
+    riccardo_region_code="Wick", riccardo_property_column='Thermal Conductivity (W/m-K)', riccardo_base_path=riccardo_data_base_path
+)
 # endregion
 
 input("Press Enter to continue...")

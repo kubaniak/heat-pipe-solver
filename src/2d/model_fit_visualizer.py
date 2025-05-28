@@ -138,6 +138,7 @@ def get_model_function(model_type: str) -> Callable:
         'power_law': lambda T, a, b, c: a * T**b + c,
         'exponential': lambda T, a, b, c: np.exp(a + b / T + c * np.log(T)),
         'inverse_power': lambda T, a, b, c: a * T**(-b) + c,
+        'codata': lambda T, a, b, c, d: a + b * T + c * T**2 + d / T**2,
     }
     
     if model_type in model_functions:
@@ -155,31 +156,31 @@ def main():
     
     # This is just example data - replace with your actual data
     c_p_data = np.array([
-        490, 
-        840,
-        1310,
-        1710,
-        1930,
-        1980,
-        1920,
-        1810,
-        1680,
-        1580,
-        1510,
-        1440,
-        1390,
-        1380,
-        1360,
-        1330,
-        1300,
-        1300,
-        1340,
-        1440,
-        1760
+        860,
+        1250,
+        1800,
+        2280,
+        2590,
+        2720,
+        2700,
+        2620,
+        2510,
+        2430,
+        2390,
+        2360,
+        2340,
+        2410,
+        2460,
+        2530,
+        2660,
+        2910,
+        3400,
+        4470,
+        8030
     ])
     
     # Get a model function
-    model_func = get_model_function('polynomial_6')
+    model_func = get_model_function('codata') 
     
     # Analyze the property
     params = analyze_property(
@@ -192,7 +193,7 @@ def main():
     )
     # a, b = params
     print(f"\nFitted model equation:")
-    # print(f"c_p(T) = {a:.4f} * T + {b:.4f}")
+    print(f"c_p(T) = {params[0]:.4f} + {params[1]:.4f} * T + {params[2]:.4f} * T**2 + {params[3]:.4f} / T**2")
 
 if __name__ == "__main__":
     main()

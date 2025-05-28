@@ -177,3 +177,6 @@ cython_debug/
 frames/
 #   This folder is used by the frames package to store temporary files. It is not needed for
 #   the package to work and can be safely ignored.
+
+Properties_Riccardo/
+Short_Properties_Riccardo/

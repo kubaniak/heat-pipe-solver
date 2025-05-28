@@ -24,9 +24,36 @@ def k_sodium_l(T): return 124.67 - 0.11381 * T + 5.5226e-5 * T**2 - 1.1842e-8 * 
 def c_p_sodium_s(T): return 1199 + 0.649 * (T - 273.15) + 1052.9e-5 * (T - 273.15)**2
 def c_p_sodium_l(T): return 1436.72 - 0.58 * (T - 273.15) + 4.672e-4 * (T - 273.15)**2
 
-def c_p_sodium_v(T):
+def c_p_sodium_v(T): # OLD IMPLEMENTATION
     return (16105.174483770606 - 111.33277032117233 * T + 0.2994911138258808 * T**2 - 0.00037555960577985903 * T**3
             + 2.418799137943085e-07 * T**4 - 7.773570963102343e-11 * T**5 + 9.892389871569863e-15 * T**6)
+
+# def drho_sodium_ldT(T):
+#     first_denom = 100*T_Na_crit* npx.sqrt(1 - T / T_Na_crit)
+#     return -25579.0 / first_denom - 6883.0 / (25.0 * T_Na_crit)
+
+# def d2PdT2_sodium(T):
+#     numerator = (4284224*T**2-231702608200*T + 99756958705625)*npx.exp(11.9463 - 12633.73 / T)
+#     denominator = 6250000 * T**(2792/625)
+#     return numerator / denominator * 1e6
+
+# def dh_vap_dT_sodium(T):
+#     first_denom = 250000*T_Na_crit*(1 - T / T_Na_crit)**(35349/50000)
+#     return -322219443 / first_denom -39337 / (100 * T_Na_crit)
+
+# def drho_sodium_vdT(T):
+#     numerator = (
+#         T**2 * dPdT_sodium(T)**2 * drho_sodium_ldT(T)
+#         + (T * h_vap_sodium(T) * d2PdT2_sodium(T) + (h_vap_sodium(T) - T * dh_vap_dT_sodium(T)))
+#         * dPdT_sodium(T) * rho_sodium_l(T)**2
+#     )
+#     denominator = (h_vap_sodium(T) * rho_sodium_l(T) + T * dPdT_sodium(T))**2
+#     return numerator / denominator
+
+# def c_p_sodium_v(T):
+#     return 11090.7671 + -11.5732 * T + 0.0039 * T**2 + -1098502099.3901 / T**2
+    
+
 
 def c_v_sodium_v(T):
     return (2944.6696506593726 - 27.379453000849395 * T + 0.08934864074702555 * T**2 - 0.00011764446335597157 * T**3\
@@ -68,7 +95,7 @@ def rho_eff_steel(T): return rho_steel(T) + 3.75e6 / c_p_steel(T)
 def get_steel_properties():
     return {
         'density_evap_adia': rho_eff_steel,
-        'density': rho_steel,
+        'density_cond': rho_steel,
         'thermal_conductivity': k_steel,
         'specific_heat': c_p_steel,
     }
@@ -177,7 +204,7 @@ def rho_eff_wick(T, Na_props, steel_props, params):
     rho_s = Na_props['density_solid'](T)
     rho_Na_i = get_rho_Na_i(T, params, rho_l, rho_s)
     epsilon = params['porosity_wick']
-    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density'](T)
+    return epsilon * rho_Na_i + (1 - epsilon) * steel_props['density_cond'](T)
 
 def get_wick_properties():
     return {
