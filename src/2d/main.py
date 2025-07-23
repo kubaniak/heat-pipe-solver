@@ -196,7 +196,7 @@ k_vc_profiles = []
 start_time = time.time() # Record start time
 print(f"Simulating for {t_end} seconds...")
 
-# region Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False!)
+# region Solver WITHOUT temperature-dependent properties (DON'T FORGET hasOld=False in definition of CellVariable!)
 for t in npx.arange(0, t_end, dt):
     # eq.solve(var=T, dt=dt)
     res = eq.sweep(var=T, dt=dt)
@@ -263,7 +263,7 @@ for t in npx.arange(0, t_end, dt):
     #         viewer.plot()
 # endregion
 
-# # region Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True!)
+# # region Solver WITH temperature-dependent properties (DON'T FORGET hasOld=True in definition of CellVariable!)
 # sweeps = 5
 # for t in npx.arange(0, t_end, dt):
 #     T.updateOld()
@@ -350,7 +350,7 @@ module_path = os.path.dirname(__file__)
 if module_path not in sys.path:
     sys.path.append(module_path)
 try:
-    from plot_riccardo_data import plot_property_over_time as plot_riccardo_property
+    from utils.plot_property_over_time import plot_property_over_time as plot_riccardo_property
     can_plot_riccardo = True
 except ImportError:
     print("Warning: Could not import 'plot_riccardo_data'. Riccardo data overlay will be disabled.")
