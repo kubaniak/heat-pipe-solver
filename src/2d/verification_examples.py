@@ -6,7 +6,6 @@ are provided in separate modules.
 """
 
 from fipy import CellVariable, TransientTerm, DiffusionTerm, Viewer, FaceVariable, ImplicitSourceTerm, Variable
-from fipy.tools import numerix as npx
 from fipy.meshes import CylindricalGrid2D, Grid1D
 from tqdm import tqdm
 from mesh import generate_mesh_2d
