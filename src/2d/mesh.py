@@ -5,9 +5,8 @@ This module contains functions to generate 2D meshes using FiPy.
 """
 
 from fipy import Grid2D
-from fipy import Viewer, CellVariable
+from fipy import CellVariable
 
-from params import get_all_params
 
 def generate_mesh_2d(L_x, L_y, nx, ny):
     """
@@ -32,12 +31,8 @@ def generate_mesh_2d(L_x, L_y, nx, ny):
     return mesh
 
 import numpy as np
-from fipy import Grid2D, CellVariable
-
-from fipy import CellVariable
 from fipy.meshes.nonUniformGrid2D import NonUniformGrid2D
 from fipy.meshes import CylindricalGrid2D
-import numpy as np
 
 def generate_composite_mesh(mesh_params: dict, dimensions: dict) -> tuple[NonUniformGrid2D, CellVariable]:
     """
